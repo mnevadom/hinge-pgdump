@@ -1,0 +1,2 @@
+deploy:
+  compose: postgres-infra/docker-compose.yml

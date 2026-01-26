@@ -1,0 +1,24 @@
+# PostgreSQL dumps (can be very large)
+*.sql
+*.dump
+pg_dump.sql
+*.sql.gz
+*.dump.gz
+
+# Environment variables with secrets
+.env.local
+.env.*.local
+
+# Okteto
+.okteto/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+.vscode/
+.idea/

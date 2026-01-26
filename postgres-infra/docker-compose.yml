@@ -1,0 +1,30 @@
+version: '3.8'
+services:
+  main-dev-db:
+    image: postgres:13
+    command: ["postgres",
+          "-c", "max_wal_size=4GB",
+          "-c", "checkpoint_timeout=15min"]
+    environment:
+      POSTGRES_DB: ${TARGET_DB:-mydatabase}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${ROLE_PASSWORD:-mysecretpassword}
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - main-dev-data:/var/lib/postgresql/data
+    labels:
+      dev.okteto.com/resource-manager: "false"
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        cpu: 2
+        memory: 8Gi
+volumes:
+  main-dev-data:
+    driver_opts:
+      size: 70Gi
+      class: csi-okteto
