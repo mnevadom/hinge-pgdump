@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dump-stager
+spec:
+  restartPolicy: Never
+  containers:
+    - name: stager
+      image: alpine:3.20
+      command: ["/bin/sh","-lc"]
+      args:
+        - |
+          set -euo pipefail
+          echo "Copying dump from /input/db.dump to /dumps/db.dump..."
+          ls -lh /input/db.dump
+          cp -f /input/db.dump /dumps/db.dump
+          sync
+          echo "Done. Dump now at /dumps/db.dump:"
+          ls -lh /dumps/db.dump
+      volumeMounts:
+        # PVC compartido (destino)
+        - name: dumps
+          mountPath: /dumps
+
+        # Aquí asumimos que EL DUMP YA EXISTE en /input/db.dump.
+        # En tu caso, puede venir:
+        # - baked en la imagen,
+        # - o montado desde OTRO PVC,
+        # - o descargado desde S3/GCS (si luego prefieres).
+        #
+        # Para hacerlo explícito sin depender de nada, dejo /input como emptyDir:
+        # TÚ lo reemplazas por el mecanismo real (otro PVC, etc.)
+        - name: input
+          mountPath: /input
+
+  volumes:
+    - name: dumps
+      persistentVolumeClaim:
+        claimName: pg-dumps
+
+    - name: input
+      emptyDir: {}
