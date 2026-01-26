@@ -11,25 +11,26 @@ spec:
       args:
         - |
           set -euo pipefail
-          echo "Copying dump from /input/db.dump to /dumps/db.dump..."
+
+          echo "Staging Postgres dump into shared PVC..."
+          echo "Source file:"
           ls -lh /input/db.dump
+
           cp -f /input/db.dump /dumps/db.dump
           sync
-          echo "Done. Dump now at /dumps/db.dump:"
+
+          echo "Dump staged successfully:"
           ls -lh /dumps/db.dump
       volumeMounts:
-        # PVC compartido (destino)
+        # Shared PVC where the dump will be stored
         - name: dumps
           mountPath: /dumps
 
-        # Aquí asumimos que EL DUMP YA EXISTE en /input/db.dump.
-        # En tu caso, puede venir:
-        # - baked en la imagen,
-        # - o montado desde OTRO PVC,
-        # - o descargado desde S3/GCS (si luego prefieres).
-        #
-        # Para hacerlo explícito sin depender de nada, dejo /input como emptyDir:
-        # TÚ lo reemplazas por el mecanismo real (otro PVC, etc.)
+        # This is where the dump already exists.
+        # In the real setup this could be:
+        # - baked into the image
+        # - another PVC
+        # - an init container output
         - name: input
           mountPath: /input
 
@@ -38,5 +39,7 @@ spec:
       persistentVolumeClaim:
         claimName: pg-dumps
 
+    # Placeholder volume for the source dump.
+    # Replace this with the real source mechanism if needed.
     - name: input
       emptyDir: {}

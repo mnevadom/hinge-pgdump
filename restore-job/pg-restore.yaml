@@ -1,0 +1,76 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pg-restore
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: restore
+          image: postgres:13
+          command: ["/bin/bash","-lc"]
+          env:
+            # Postgres service connection
+            - name: PGHOST
+              value: "main-dev-db"
+            - name: PGPORT
+              value: "5432"
+            - name: PGUSER
+              value: "postgres"
+
+            # Replace with a Secret if available
+            - name: PGPASSWORD
+              value: "${HINGE_DEV_ROLE_PASSWORD}"
+
+            - name: TARGET_DB
+              value: "${TARGET_DB}"
+          args:
+            - |
+              set -euo pipefail
+
+              echo "Waiting for Postgres to be ready..."
+              for i in {1..120}; do
+                if PGPASSWORD="${PGPASSWORD}" \
+                   psql -h "${PGHOST}" -U "${PGUSER}" -d postgres \
+                   -c "select 1" >/dev/null 2>&1; then
+                  echo "Postgres is ready."
+                  break
+                fi
+                sleep 2
+              done
+
+              if ! PGPASSWORD="${PGPASSWORD}" \
+                 psql -h "${PGHOST}" -U "${PGUSER}" -d postgres \
+                 -c "select 1" >/dev/null 2>&1; then
+                echo "ERROR: Postgres never became ready."
+                exit 1
+              fi
+
+              echo "Dump file found:"
+              ls -lh /dumps/db.dump
+
+              echo "Ensuring target database exists: ${TARGET_DB}"
+              PGPASSWORD="${PGPASSWORD}" \
+                psql -h "${PGHOST}" -U "${PGUSER}" -d postgres \
+                -c "CREATE DATABASE ${TARGET_DB};" || true
+
+              echo "Starting pg_restore..."
+              # --clean and --if-exists make reruns safer
+              PGPASSWORD="${PGPASSWORD}" pg_restore \
+                -h "${PGHOST}" -U "${PGUSER}" \
+                --dbname="${TARGET_DB}" \
+                --clean --if-exists \
+                --no-owner \
+                /dumps/db.dump
+
+              echo "Restore completed successfully."
+          volumeMounts:
+            # Shared PVC containing the dump
+            - name: dumps
+              mountPath: /dumps
+      volumes:
+        - name: dumps
+          persistentVolumeClaim:
+            claimName: pg-dumps
