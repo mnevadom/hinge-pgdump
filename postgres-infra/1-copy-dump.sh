@@ -4,9 +4,9 @@ set -e
 
 # Configuration
 DUMP_FILE="pg_dump.sql"
-POD_NAME=""
+POD_NAME="dump-stager"
 NAMESPACE="${OKTETO_NAMESPACE}"
-RESTORE_PATH="/var/lib/postgresql/data"
+DUMP_PATH="/input/db.dump"
 
 # Colors for output
 RED='\033[0;31m'
@@ -14,7 +14,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}=== PostgreSQL Dump Copy Script (Step 1/2) ===${NC}"
+echo -e "${GREEN}=== Dump Copy Script - Copy to dump-stager Pod ===${NC}"
 echo ""
 
 # Check if dump file exists in parent directory
@@ -30,12 +30,15 @@ DUMP_SIZE=$(du -h "../$DUMP_FILE" | cut -f1)
 echo -e "${YELLOW}Dump file size: ${DUMP_SIZE}${NC}"
 echo ""
 
-# Find the postgres pod
-echo "Finding PostgreSQL pod..."
-POD_NAME=$(kubectl get pods -n "$NAMESPACE" -l stack.okteto.com/service=main-dev-db -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-
-if [ -z "$POD_NAME" ]; then
-    echo -e "${RED}Error: Could not find PostgreSQL pod with label 'stack.okteto.com/service=main-dev-db'${NC}"
+# Check if dump-stager pod exists
+echo "Finding dump-stager pod..."
+if ! kubectl get pod "$POD_NAME" -n "$NAMESPACE" &>/dev/null; then
+    echo -e "${RED}Error: dump-stager pod not found!${NC}"
+    echo ""
+    echo "Please deploy the dump-stager pod first:"
+    echo "  kubectl apply -f ../rds-dump-pod/dumps-pvc.yaml -n $NAMESPACE"
+    echo "  kubectl apply -f ../rds-dump-pod/dump-stager-pod.yaml -n $NAMESPACE"
+    echo ""
     echo "Available pods:"
     kubectl get pods -n "$NAMESPACE"
     exit 1
@@ -46,16 +49,29 @@ echo ""
 
 # Check if pod is ready
 POD_STATUS=$(kubectl get pod "$POD_NAME" -n "$NAMESPACE" -o jsonpath='{.status.phase}')
-if [ "$POD_STATUS" != "Running" ]; then
-    echo -e "${RED}Error: Pod is not running (status: ${POD_STATUS})${NC}"
-    exit 1
+if [ "$POD_STATUS" == "Succeeded" ] || [ "$POD_STATUS" == "Failed" ]; then
+    echo -e "${YELLOW}Warning: Pod already completed (status: ${POD_STATUS})${NC}"
+    echo ""
+    echo "You may need to delete and recreate the pod:"
+    echo "  kubectl delete pod $POD_NAME -n $NAMESPACE"
+    echo "  kubectl apply -f ../rds-dump-pod/dump-stager-pod.yaml -n $NAMESPACE"
+    echo ""
+    read -p "Do you want to continue anyway? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        exit 0
+    fi
+elif [ "$POD_STATUS" != "Running" ]; then
+    echo -e "${YELLOW}Warning: Pod is not running (status: ${POD_STATUS})${NC}"
+    echo "Waiting for pod to be ready..."
+    kubectl wait --for=condition=ready pod/$POD_NAME -n "$NAMESPACE" --timeout=60s || true
 fi
 
 # Check if dump file already exists in pod
 echo "Checking if dump file already exists in pod..."
-if kubectl exec -n "$NAMESPACE" "$POD_NAME" -- test -f "$RESTORE_PATH/$DUMP_FILE" 2>/dev/null; then
+if kubectl exec -n "$NAMESPACE" "$POD_NAME" -- test -f "$DUMP_PATH" 2>/dev/null; then
     echo -e "${YELLOW}Warning: Dump file already exists in pod!${NC}"
-    echo "Location: $RESTORE_PATH/$DUMP_FILE"
+    echo "Location: $DUMP_PATH"
     echo ""
     read -p "Do you want to overwrite it? (y/N): " -n 1 -r
     echo
@@ -63,22 +79,20 @@ if kubectl exec -n "$NAMESPACE" "$POD_NAME" -- test -f "$RESTORE_PATH/$DUMP_FILE
         echo "Copy cancelled. Using existing dump file."
         echo ""
         echo "To verify the existing file:"
-        echo "  kubectl exec -n $NAMESPACE $POD_NAME -- ls -lh $RESTORE_PATH/$DUMP_FILE"
-        echo ""
-        echo "To proceed with restore, run: ./2-restore-dump.sh"
+        echo "  kubectl exec -n $NAMESPACE $POD_NAME -- ls -lh $DUMP_PATH"
         exit 0
     fi
     echo "Overwriting existing dump file..."
     echo ""
 fi
 
-echo -e "${YELLOW}Step 1: Copying dump file to persistent volume...${NC}"
+echo -e "${YELLOW}Step 1: Copying dump file to dump-stager pod...${NC}"
 echo "This may take several minutes for large files (10-60 min for 100GB)"
-echo "Destination: $RESTORE_PATH/$DUMP_FILE"
+echo "Destination: $POD_NAME:$DUMP_PATH"
 echo ""
 
-# Copy with progress indication
-kubectl cp "../$DUMP_FILE" "$NAMESPACE/$POD_NAME:$RESTORE_PATH/$DUMP_FILE"
+# Copy to the dump-stager pod's /input directory
+kubectl cp "../$DUMP_FILE" "$NAMESPACE/$POD_NAME:$DUMP_PATH"
 
 if [ $? -eq 0 ]; then
     echo ""
@@ -91,18 +105,20 @@ fi
 
 echo ""
 echo -e "${YELLOW}Step 2: Verifying file in pod...${NC}"
-kubectl exec -n "$NAMESPACE" "$POD_NAME" -- ls -lh "$RESTORE_PATH/$DUMP_FILE"
+kubectl exec -n "$NAMESPACE" "$POD_NAME" -- ls -lh "$DUMP_PATH"
 
 # Check available disk space
 echo ""
-echo -e "${YELLOW}Step 3: Checking disk space...${NC}"
-kubectl exec -n "$NAMESPACE" "$POD_NAME" -- df -h "$RESTORE_PATH"
+echo -e "${YELLOW}Step 3: Checking disk space in /input...${NC}"
+kubectl exec -n "$NAMESPACE" "$POD_NAME" -- df -h /input
 
 echo ""
 echo -e "${GREEN}=== Copy Complete ===${NC}"
-echo "Dump file location: $RESTORE_PATH/$DUMP_FILE"
-echo "File is stored in the persistent volume (not consuming node resources)"
+echo "Dump file location: $POD_NAME:$DUMP_PATH"
 echo ""
-echo -e "${GREEN}Next step: Run the restore script${NC}"
-echo "  cd postgres-infra"
-echo "  ./2-restore-dump.sh"
+echo -e "${GREEN}Next step:${NC}"
+echo "The dump-stager pod will now process the dump and copy it to the shared PVC."
+echo "Your restore job should automatically pick it up from the shared volume."
+echo ""
+echo "To monitor the dump-stager pod:"
+echo "  kubectl logs -f $POD_NAME -n $NAMESPACE"
