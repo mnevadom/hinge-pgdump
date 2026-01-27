@@ -105,16 +105,35 @@ echo ""
 echo -e "${YELLOW}Step 2: Checking available disk space...${NC}"
 kubectl exec -n "$NAMESPACE" "$POD_NAME" -- df -h "$RESTORE_PATH"
 
+# Detect dump format
 echo ""
-echo -e "${YELLOW}Step 3: Starting database restore...${NC}"
+echo -e "${YELLOW}Step 3: Detecting dump format...${NC}"
+DUMP_HEADER=$(kubectl exec -n "$NAMESPACE" "$POD_NAME" -- head -c 100 "$RESTORE_PATH/$DUMP_FILE" 2>/dev/null | head -1)
+
+# Check if it's a custom format dump (starts with "PGDMP")
+if echo "$DUMP_HEADER" | grep -q "PGDMP"; then
+    DUMP_FORMAT="custom"
+    RESTORE_COMMAND="pg_restore -U $DB_USER -d $DB_NAME --no-owner --no-acl --verbose $RESTORE_PATH/$DUMP_FILE"
+    echo -e "${GREEN}✓ Detected: PostgreSQL custom-format dump${NC}"
+    echo "Will use: pg_restore"
+else
+    DUMP_FORMAT="plain"
+    RESTORE_COMMAND="psql -U $DB_USER -d $DB_NAME < $RESTORE_PATH/$DUMP_FILE"
+    echo -e "${GREEN}✓ Detected: Plain SQL dump${NC}"
+    echo "Will use: psql"
+fi
+
+echo ""
+echo -e "${YELLOW}Step 4: Starting database restore...${NC}"
 echo "This process may take several minutes to hours depending on dump size"
 echo "Database: $DB_NAME"
 echo "User: $DB_USER"
+echo "Format: $DUMP_FORMAT"
 echo ""
 echo "Restoring..."
 
-# Restore the dump
-kubectl exec -n "$NAMESPACE" "$POD_NAME" -- bash -c "psql -U $DB_USER -d $DB_NAME < $RESTORE_PATH/$DUMP_FILE"
+# Restore the dump using the appropriate method
+kubectl exec -n "$NAMESPACE" "$POD_NAME" -- bash -c "$RESTORE_COMMAND"
 
 if [ $? -eq 0 ]; then
     echo ""
@@ -126,7 +145,7 @@ if [ $? -eq 0 ]; then
     kubectl exec -n "$NAMESPACE" "$POD_NAME" -- psql -U "$DB_USER" -d "$DB_NAME" -c "SELECT COUNT(*) as table_count FROM information_schema.tables WHERE table_schema = 'public';"
 
     echo ""
-    echo -e "${YELLOW}Step 4: Dump file remains in persistent volume${NC}"
+    echo -e "${YELLOW}Step 5: Dump file remains in persistent volume${NC}"
     echo "File location: $RESTORE_PATH/$DUMP_FILE"
     echo "The dump is stored in the persistent volume, not consuming node resources."
     echo ""

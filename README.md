@@ -15,7 +15,7 @@ ROLE_PASSWORD=your_secure_password
 
 ### 2. Add Your Database Dump
 
-Place your SQL dump in the project root and rename it:
+Place your database dump in the project root and rename it to `pg_dump.sql`:
 
 ```bash
 # If compressed, decompress first
@@ -24,6 +24,12 @@ gunzip your-dump.sql.gz
 # Rename to pg_dump.sql
 mv your-dump.sql pg_dump.sql
 ```
+
+**Supported formats:**
+- Plain SQL dump (`.sql`)
+- PostgreSQL custom-format dump (created with `pg_dump -Fc`)
+
+The restore script automatically detects the format and uses the appropriate restore method (`psql` or `pg_restore`).
 
 ### 3. Deploy
 
