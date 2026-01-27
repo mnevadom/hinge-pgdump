@@ -11,7 +11,12 @@ Edit `postgres-infra/.env`:
 ```bash
 TARGET_DB=your_database_name
 ROLE_PASSWORD=your_secure_password
+
+# Dump file path (full path inside PostgreSQL pod)
+PG_DUMP_PATH=/var/lib/postgresql/data/pg_dump.sql
 ```
+
+**Note:** You can change `PG_DUMP_PATH` if you want to use a different filename or location.
 
 ### 2. Add Your Database Dump
 
