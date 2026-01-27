@@ -1,0 +1,25 @@
+# Ignore large database dump files
+*.sql
+*.dump
+*.dmp
+pg_dump.*
+
+# Ignore compressed dumps
+*.sql.gz
+*.dump.gz
+*.tar.gz
+*.zip
+
+# Ignore backup files
+*.bak
+*.backup
+
+# Ignore environment files with secrets
+.env
+
+# Ignore git
+.git/
+.gitignore
+
+# Ignore old folder
+old/
