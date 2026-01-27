@@ -1,3 +1,8 @@
+build:
+  restore-job:
+    context: .
+    dockerfile: Dockerfile
+
 deploy:
   - name: Clean Previous PostgreSQL Deployment
     command: |
