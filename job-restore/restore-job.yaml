@@ -28,24 +28,15 @@ spec:
             configMapKeyRef:
               name: postgres-restore-config
               key: TARGET_DB
-        - name: RESTORE_PATH
-          value: "/var/lib/postgresql/data"
-        - name: DUMP_FILE
-          value: "pg_dump.sql"
-        volumeMounts:
-        - name: postgres-data
-          mountPath: /var/lib/postgresql/data
+        - name: DUMP_PATH_IN_PG_POD
+          value: "/var/lib/postgresql/data/pg_dump.sql"
         resources:
           requests:
             cpu: 500m
-            memory: 2Gi
+            memory: 1Gi
           limits:
-            cpu: 2
-            memory: 4Gi
-      volumes:
-      - name: postgres-data
-        persistentVolumeClaim:
-          claimName: main-dev-data
+            cpu: 1
+            memory: 2Gi
 ---
 apiVersion: v1
 kind: ConfigMap
