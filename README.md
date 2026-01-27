@@ -1,6 +1,6 @@
 # PostgreSQL Database Restore on Okteto
 
-Simple project to deploy PostgreSQL 13 and restore your database dump on Okteto.
+Simple project to deploy PostgreSQL 15 and restore your database dump on Okteto.
 
 ## Setup Steps
 
@@ -131,7 +131,7 @@ okteto destroy
 ## Configuration Details
 
 **PostgreSQL Settings:**
-- Version: 13
+- Version: 15
 - Storage: 70GB persistent volume
 - max_wal_size: 4GB (optimized for large dumps)
 - checkpoint_timeout: 15min
