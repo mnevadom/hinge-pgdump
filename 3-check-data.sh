@@ -18,14 +18,43 @@ NC='\033[0m' # No Color
 echo -e "${GREEN}=== PostgreSQL Data Check Script ===${NC}"
 echo ""
 
+# Check if namespace is set
+if [ -z "$NAMESPACE" ]; then
+    echo -e "${RED}Error: OKTETO_NAMESPACE environment variable is not set!${NC}"
+    echo ""
+    echo "Please set it before running this script:"
+    echo "  export OKTETO_NAMESPACE=your-namespace"
+    echo "  ./3-check-data.sh"
+    echo ""
+    echo "Or run inline:"
+    echo "  OKTETO_NAMESPACE=your-namespace ./3-check-data.sh"
+    exit 1
+fi
+
 # Find the postgres pod
 echo "Finding PostgreSQL pod..."
-POD_NAME=$(kubectl get pods -n "$NAMESPACE" -l stack.okteto.com/service=main-dev-db -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+echo "Using namespace: $NAMESPACE"
+echo "Looking for pods with label: stack.okteto.com/service=main-dev-db"
+echo ""
+
+POD_NAME=$(kubectl get pods -n "$NAMESPACE" -l stack.okteto.com/service=main-dev-db -o jsonpath='{.items[0].metadata.name}' 2>&1)
 
 if [ -z "$POD_NAME" ]; then
     echo -e "${RED}Error: Could not find PostgreSQL pod with label 'stack.okteto.com/service=main-dev-db'${NC}"
-    echo "Available pods:"
-    kubectl get pods -n "$NAMESPACE"
+    echo ""
+    echo "Debugging information:"
+    echo "- Namespace: $NAMESPACE"
+    echo "- kubectl version:"
+    kubectl version --client --short 2>/dev/null || echo "  Could not get kubectl version"
+    echo ""
+    echo "Checking all pods in namespace:"
+    kubectl get pods -n "$NAMESPACE" 2>&1
+    echo ""
+    echo "Checking all services in namespace:"
+    kubectl get svc -n "$NAMESPACE" 2>&1
+    echo ""
+    echo "Checking all statefulsets in namespace:"
+    kubectl get statefulset -n "$NAMESPACE" 2>&1
     exit 1
 fi
 

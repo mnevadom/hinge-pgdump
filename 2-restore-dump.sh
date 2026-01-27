@@ -19,14 +19,34 @@ NC='\033[0m' # No Color
 echo -e "${GREEN}=== PostgreSQL Dump Restore Script ===${NC}"
 echo ""
 
+# Check if namespace is set
+if [ -z "$NAMESPACE" ]; then
+    echo -e "${RED}Error: OKTETO_NAMESPACE environment variable is not set!${NC}"
+    echo ""
+    echo "Please set it before running this script:"
+    echo "  export OKTETO_NAMESPACE=your-namespace"
+    echo "  ./2-restore-dump.sh"
+    exit 1
+fi
+
+echo "Using namespace: $NAMESPACE"
+echo ""
+
 # Find the postgres pod
 echo "Finding PostgreSQL pod..."
-POD_NAME=$(kubectl get pods -n "$NAMESPACE" -l stack.okteto.com/service=main-dev-db -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+echo "Looking for pods with label: stack.okteto.com/service=main-dev-db"
+POD_NAME=$(kubectl get pods -n "$NAMESPACE" -l stack.okteto.com/service=main-dev-db -o jsonpath='{.items[0].metadata.name}' 2>&1)
 
 if [ -z "$POD_NAME" ]; then
     echo -e "${RED}Error: Could not find PostgreSQL pod with label 'stack.okteto.com/service=main-dev-db'${NC}"
-    echo "Available pods:"
-    kubectl get pods -n "$NAMESPACE"
+    echo ""
+    echo "Debugging information:"
+    echo "Checking all pods in namespace '$NAMESPACE':"
+    kubectl get pods -n "$NAMESPACE" 2>&1
+    echo ""
+    echo "Please ensure:"
+    echo "1. PostgreSQL is deployed: okteto deploy --wait"
+    echo "2. Dump has been copied: ./1-copy-dump.sh"
     exit 1
 fi
 
