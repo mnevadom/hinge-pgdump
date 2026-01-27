@@ -10,6 +10,7 @@ This project deploys a PostgreSQL 13 database on Okteto with support for restori
 ├── pg_dump.sql                     # Your PostgreSQL dump file (place here)
 ├── 1-copy-dump.sh                  # Step 1: Copy dump to PostgreSQL pod
 ├── 2-restore-dump.sh               # Step 2: Restore database
+├── 3-check-data.sh                 # Check restored data and statistics
 ├── postgres-infra/                 # PostgreSQL infrastructure
 │   ├── docker-compose.yml          # PostgreSQL service definition
 │   ├── .env                        # Environment variables
@@ -75,6 +76,20 @@ Time estimate: 30-60 minutes for 100GB dump.
 
 This restores the database from the dump in the PostgreSQL pod.
 Time estimate: 2-4 hours for 100GB dump.
+
+### 4. Check Restored Data
+
+```bash
+./3-check-data.sh
+```
+
+This displays comprehensive database statistics:
+- Database size and version
+- Table count and sizes
+- Row counts for all tables
+- Indexes, sequences, and views
+- Foreign key relationships
+- Disk usage and activity stats
 
 ## Configuration
 
