@@ -46,7 +46,15 @@ echo ""
 # Find the postgres pod
 echo "Finding PostgreSQL pod..."
 echo "Looking for pods with label: stack.okteto.com/service=main-dev-db"
-POD_NAME=$(kubectl get pods -n "$NAMESPACE" -l stack.okteto.com/service=main-dev-db -o jsonpath='{.items[0].metadata.name}' 2>&1)
+POD_SEARCH_OUTPUT=$(kubectl get pods -n "$NAMESPACE" -l stack.okteto.com/service=main-dev-db -o jsonpath='{.items[0].metadata.name}' 2>&1)
+POD_NAME=$(echo "$POD_SEARCH_OUTPUT" | grep -v "Error" | grep -v "error" | xargs)
+
+echo "Pod search result: '$POD_NAME'"
+if [ -n "$POD_SEARCH_OUTPUT" ] && echo "$POD_SEARCH_OUTPUT" | grep -qi "error"; then
+    echo -e "${RED}kubectl error occurred:${NC}"
+    echo "$POD_SEARCH_OUTPUT"
+    echo ""
+fi
 
 if [ -z "$POD_NAME" ]; then
     echo -e "${RED}Error: Could not find PostgreSQL pod with label 'stack.okteto.com/service=main-dev-db'${NC}"
