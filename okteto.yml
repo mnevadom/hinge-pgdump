@@ -27,6 +27,37 @@ deploy:
 
   - name: Restore Database
     command: |
-      echo "Running restore script..."
-      ./2-restore-dump.sh
-      echo "✓ Database restore completed"
+      echo "Starting database restore job..."
+      echo ""
+
+      # Load environment variables
+      if [ -f "postgres-infra/.env" ]; then
+        export $(cat postgres-infra/.env | grep -v '^#' | xargs)
+      fi
+
+      # Create ConfigMap with database name
+      envsubst < k8s/restore-job.yaml | kubectl apply -n ${OKTETO_NAMESPACE} -f -
+
+      echo "✓ Restore job created"
+      echo ""
+      echo "Waiting for restore job to complete (this may take several hours)..."
+      echo "You can monitor progress with:"
+      echo "  kubectl logs -f -n ${OKTETO_NAMESPACE} job/postgres-restore-job"
+      echo ""
+
+      # Wait for job to complete (with timeout)
+      kubectl wait --for=condition=complete --timeout=18000s -n ${OKTETO_NAMESPACE} job/postgres-restore-job || {
+        echo ""
+        echo "⚠️  Job did not complete within timeout or failed"
+        echo "Check job status:"
+        echo "  kubectl get job -n ${OKTETO_NAMESPACE} postgres-restore-job"
+        echo "Check logs:"
+        echo "  kubectl logs -n ${OKTETO_NAMESPACE} job/postgres-restore-job"
+        exit 1
+      }
+
+      echo ""
+      echo "✓ Database restore completed successfully!"
+      echo ""
+      echo "View restore logs:"
+      echo "  kubectl logs -n ${OKTETO_NAMESPACE} job/postgres-restore-job"

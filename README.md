@@ -41,9 +41,21 @@ This will:
 - Clean any previous PostgreSQL deployment
 - Deploy fresh PostgreSQL with 70GB storage
 - Copy your dump to the database pod
-- Restore the database automatically
+- Start a Kubernetes Job to restore the database (runs in background)
 
-**That's it!** Your database will be restored and ready to use.
+**That's it!** The restore job will run unattended in the cluster. You can disconnect and check back later.
+
+### Monitor Restore Progress
+
+```bash
+# Watch restore job logs in real-time
+kubectl logs -f -n ${OKTETO_NAMESPACE} job/postgres-restore-job
+
+# Check job status
+kubectl get job -n ${OKTETO_NAMESPACE} postgres-restore-job
+```
+
+The Job will automatically handle the restore even if you disconnect. Kubernetes will keep it running until completion.
 
 ## Verify Data
 
@@ -74,9 +86,9 @@ Then connect locally:
 psql -h localhost -U postgres -d your_database_name
 ```
 
-## Manual Steps (Optional)
+## Manual Steps (Alternative)
 
-If you want to run steps manually instead of automatic deployment:
+If you prefer to run steps manually with local scripts instead of the automated Job:
 
 ```bash
 # 1. Deploy PostgreSQL only
@@ -85,12 +97,14 @@ okteto deploy --file postgres-infra/docker-compose.yml --wait
 # 2. Copy dump
 ./1-copy-dump.sh
 
-# 3. Restore database
+# 3. Restore database (runs locally, requires stable connection)
 ./2-restore-dump.sh
 
 # 4. Check data
 ./3-check-data.sh
 ```
+
+**Note**: Manual restore with `2-restore-dump.sh` requires your terminal to stay connected for the entire duration (potentially hours). The automated Job approach is more reliable for large dumps.
 
 ## Time Estimates
 
@@ -139,11 +153,12 @@ okteto destroy
 
 **Files:**
 - `okteto.yml` - Deployment automation
+- `k8s/restore-job.yaml` - Kubernetes Job for reliable restore
 - `pg_dump.sql` - Your database dump (add this)
 - `postgres-infra/docker-compose.yml` - PostgreSQL service
 - `postgres-infra/.env` - Database configuration
-- `1-copy-dump.sh` - Copy dump to pod
-- `2-restore-dump.sh` - Restore database
+- `1-copy-dump.sh` - Copy dump to pod (manual)
+- `2-restore-dump.sh` - Restore database (manual)
 - `3-check-data.sh` - Verify restored data
 
 ---

@@ -1,0 +1,16 @@
+# Database dumps
+pg_dump.sql
+*.sql
+*.dump
+
+# Environment files with secrets
+.env
+
+# Backup files
+*.bak
+*.backup
+
+# Compressed dumps
+*.gz
+*.tar.gz
+*.zip

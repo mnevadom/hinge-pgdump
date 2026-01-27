@@ -1,0 +1,119 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-restore-job
+  labels:
+    app: postgres-restore
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 3600  # Keep job for 1 hour after completion
+  template:
+    metadata:
+      labels:
+        app: postgres-restore
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: restore
+        image: postgres:16
+        env:
+        - name: PGHOST
+          value: "main-dev-db"
+        - name: PGPORT
+          value: "5432"
+        - name: PGUSER
+          value: "postgres"
+        - name: PGDATABASE
+          valueFrom:
+            configMapKeyRef:
+              name: postgres-restore-config
+              key: TARGET_DB
+        - name: RESTORE_PATH
+          value: "/var/lib/postgresql/data"
+        - name: DUMP_FILE
+          value: "pg_dump.sql"
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+
+          echo "=== PostgreSQL Restore Job ==="
+          echo "Database: $PGDATABASE"
+          echo "Host: $PGHOST"
+          echo ""
+
+          # Wait for PostgreSQL to be ready
+          echo "Waiting for PostgreSQL to be ready..."
+          until pg_isready -h $PGHOST -p $PGPORT -U $PGUSER; do
+            echo "Waiting for database connection..."
+            sleep 5
+          done
+          echo "✓ PostgreSQL is ready"
+          echo ""
+
+          # Verify dump file exists
+          echo "Verifying dump file exists..."
+          if [ ! -f "$RESTORE_PATH/$DUMP_FILE" ]; then
+            echo "ERROR: Dump file not found at $RESTORE_PATH/$DUMP_FILE"
+            echo "Please ensure the copy step completed successfully."
+            exit 1
+          fi
+
+          # Show file info
+          ls -lh "$RESTORE_PATH/$DUMP_FILE"
+          echo "✓ Dump file found"
+          echo ""
+
+          # Detect dump format
+          echo "Detecting dump format..."
+          DUMP_HEADER=$(head -c 100 "$RESTORE_PATH/$DUMP_FILE" | head -1)
+
+          if echo "$DUMP_HEADER" | grep -q "PGDMP"; then
+            DUMP_FORMAT="custom"
+            echo "✓ Detected: PostgreSQL custom-format dump"
+            echo "Using: pg_restore"
+            echo ""
+            echo "Starting restore (this may take several hours)..."
+            pg_restore -h $PGHOST -U $PGUSER -d $PGDATABASE --no-owner --no-acl --verbose "$RESTORE_PATH/$DUMP_FILE"
+          else
+            DUMP_FORMAT="plain"
+            echo "✓ Detected: Plain SQL dump"
+            echo "Using: psql"
+            echo ""
+            echo "Starting restore (this may take several hours)..."
+            psql -h $PGHOST -U $PGUSER -d $PGDATABASE < "$RESTORE_PATH/$DUMP_FILE"
+          fi
+
+          echo ""
+          echo "✓ Database restored successfully!"
+          echo ""
+
+          # Show database info
+          echo "=== Database Information ==="
+          psql -h $PGHOST -U $PGUSER -d $PGDATABASE -c "SELECT COUNT(*) as table_count FROM information_schema.tables WHERE table_schema = 'public';"
+
+          echo ""
+          echo "=== Restore Complete ==="
+          echo "Job completed successfully at $(date)"
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        resources:
+          requests:
+            cpu: 500m
+            memory: 2Gi
+          limits:
+            cpu: 2
+            memory: 4Gi
+      volumes:
+      - name: postgres-data
+        persistentVolumeClaim:
+          claimName: main-dev-data
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-restore-config
+data:
+  TARGET_DB: ${TARGET_DB}
