@@ -156,63 +156,63 @@ else
     echo "No tables found in public schema."
 fi
 
-echo ""
-echo -e "${BLUE}=== Indexes ===${NC}"
-kubectl exec -n "$NAMESPACE" "$POD_NAME" -- psql -U "$DB_USER" -d "$DB_NAME" -c "
-SELECT
-    schemaname,
-    tablename,
-    indexname,
-    pg_size_pretty(pg_relation_size(indexname::regclass)) as index_size
-FROM pg_indexes
-WHERE schemaname = 'public'
-ORDER BY pg_relation_size(indexname::regclass) DESC
-LIMIT 15;
-" 2>/dev/null
+# echo ""
+# echo -e "${BLUE}=== Indexes ===${NC}"
+# kubectl exec -n "$NAMESPACE" "$POD_NAME" -- psql -U "$DB_USER" -d "$DB_NAME" -c "
+# SELECT
+#     schemaname,
+#     tablename,
+#     indexname,
+#     pg_size_pretty(pg_relation_size(indexname::regclass)) as index_size
+# FROM pg_indexes
+# WHERE schemaname = 'public'
+# ORDER BY pg_relation_size(indexname::regclass) DESC
+# LIMIT 15;
+# " 2>/dev/null
 
-echo ""
-echo -e "${BLUE}=== Sequences ===${NC}"
-kubectl exec -n "$NAMESPACE" "$POD_NAME" -- psql -U "$DB_USER" -d "$DB_NAME" -c "
-SELECT
-    schemaname,
-    sequencename,
-    last_value
-FROM pg_sequences
-WHERE schemaname = 'public'
-ORDER BY sequencename;
-" 2>/dev/null
+# echo ""
+# echo -e "${BLUE}=== Sequences ===${NC}"
+# kubectl exec -n "$NAMESPACE" "$POD_NAME" -- psql -U "$DB_USER" -d "$DB_NAME" -c "
+# SELECT
+#     schemaname,
+#     sequencename,
+#     last_value
+# FROM pg_sequences
+# WHERE schemaname = 'public'
+# ORDER BY sequencename;
+# " 2>/dev/null
 
-echo ""
-echo -e "${BLUE}=== Views ===${NC}"
-kubectl exec -n "$NAMESPACE" "$POD_NAME" -- psql -U "$DB_USER" -d "$DB_NAME" -c "
-SELECT
-    schemaname,
-    viewname
-FROM pg_views
-WHERE schemaname = 'public'
-ORDER BY viewname;
-" 2>/dev/null
+# echo ""
+# echo -e "${BLUE}=== Views ===${NC}"
+# kubectl exec -n "$NAMESPACE" "$POD_NAME" -- psql -U "$DB_USER" -d "$DB_NAME" -c "
+# SELECT
+#     schemaname,
+#     viewname
+# FROM pg_views
+# WHERE schemaname = 'public'
+# ORDER BY viewname;
+# " 2>/dev/null
 
-echo ""
-echo -e "${BLUE}=== Foreign Keys ===${NC}"
-kubectl exec -n "$NAMESPACE" "$POD_NAME" -- psql -U "$DB_USER" -d "$DB_NAME" -c "
-SELECT
-    tc.table_name,
-    kcu.column_name,
-    ccu.table_name AS foreign_table_name,
-    ccu.column_name AS foreign_column_name
-FROM information_schema.table_constraints AS tc
-JOIN information_schema.key_column_usage AS kcu
-    ON tc.constraint_name = kcu.constraint_name
-    AND tc.table_schema = kcu.table_schema
-JOIN information_schema.constraint_column_usage AS ccu
-    ON ccu.constraint_name = tc.constraint_name
-    AND ccu.table_schema = tc.table_schema
-WHERE tc.constraint_type = 'FOREIGN KEY'
-    AND tc.table_schema = 'public'
-ORDER BY tc.table_name, kcu.column_name
-LIMIT 20;
-" 2>/dev/null
+# echo ""
+# echo -e "${BLUE}=== Foreign Keys ===${NC}"
+# kubectl exec -n "$NAMESPACE" "$POD_NAME" -- psql -U "$DB_USER" -d "$DB_NAME" -c "
+# SELECT
+#     tc.table_name,
+#     kcu.column_name,
+#     ccu.table_name AS foreign_table_name,
+#     ccu.column_name AS foreign_column_name
+# FROM information_schema.table_constraints AS tc
+# JOIN information_schema.key_column_usage AS kcu
+#     ON tc.constraint_name = kcu.constraint_name
+#     AND tc.table_schema = kcu.table_schema
+# JOIN information_schema.constraint_column_usage AS ccu
+#     ON ccu.constraint_name = tc.constraint_name
+#     AND ccu.table_schema = tc.table_schema
+# WHERE tc.constraint_type = 'FOREIGN KEY'
+#     AND tc.table_schema = 'public'
+# ORDER BY tc.table_name, kcu.column_name
+# LIMIT 20;
+# " 2>/dev/null
 
 echo ""
 echo -e "${BLUE}=== Disk Usage ===${NC}"
