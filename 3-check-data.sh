@@ -1,6 +1,7 @@
 #!/bin/bash
 
-set -e
+# Note: NOT using 'set -e' because we need to handle kubectl errors gracefully
+# and check exit codes manually
 
 # Configuration
 POD_NAME=""
@@ -37,15 +38,30 @@ echo "Using namespace: $NAMESPACE"
 echo "Looking for pods with label: stack.okteto.com/service=main-dev-db"
 echo ""
 
+# Capture kubectl output (both stdout and stderr)
 POD_SEARCH_OUTPUT=$(kubectl get pods -n "$NAMESPACE" -l stack.okteto.com/service=main-dev-db -o jsonpath='{.items[0].metadata.name}' 2>&1)
-POD_NAME=$(echo "$POD_SEARCH_OUTPUT" | grep -v "Error" | grep -v "error" | xargs)
+KUBECTL_EXIT_CODE=$?
 
-echo "Pod search result: '$POD_NAME'"
-if [ -n "$POD_SEARCH_OUTPUT" ] && echo "$POD_SEARCH_OUTPUT" | grep -qi "error"; then
-    echo -e "${RED}kubectl error occurred:${NC}"
+echo "kubectl command exit code: $KUBECTL_EXIT_CODE"
+echo "kubectl raw output: '$POD_SEARCH_OUTPUT'"
+echo ""
+
+# Check if kubectl command failed
+if [ $KUBECTL_EXIT_CODE -ne 0 ]; then
+    echo -e "${RED}kubectl command failed!${NC}"
     echo "$POD_SEARCH_OUTPUT"
     echo ""
+    echo "This is likely a permissions issue. Please ensure:"
+    echo "1. You have access to namespace '$NAMESPACE'"
+    echo "2. Your service account has permission to list pods in this namespace"
+    echo "3. The namespace exists: kubectl get namespace $NAMESPACE"
+    exit 1
 fi
+
+# Extract pod name (filter out any error strings that might be mixed in)
+POD_NAME=$(echo "$POD_SEARCH_OUTPUT" | grep -v "Error" | grep -v "error" | grep -v "Forbidden" | xargs)
+
+echo "Extracted pod name: '$POD_NAME'"
 
 if [ -z "$POD_NAME" ]; then
     echo -e "${RED}Error: Could not find PostgreSQL pod with label 'stack.okteto.com/service=main-dev-db'${NC}"

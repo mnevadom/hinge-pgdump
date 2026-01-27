@@ -1,4 +1,10 @@
 deploy:
+  - name: Clean Previous PostgreSQL Deployment
+    command: |
+      echo "Cleaning up any previous PostgreSQL deployment..."
+      okteto destroy --file postgres-infra/docker-compose.yml --wait 2>/dev/null || echo "No previous deployment found"
+      echo "✓ Cleanup completed"
+
   - name: Deploy PostgreSQL Compose
     command: |
       echo "Deploying PostgreSQL via docker-compose..."
