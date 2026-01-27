@@ -29,10 +29,7 @@ spec:
               name: postgres-restore-config
               key: TARGET_DB
         - name: DUMP_PATH_IN_PG_POD
-          valueFrom:
-            configMapKeyRef:
-              name: postgres-restore-config
-              key: PG_DUMP_PATH
+          value: "/var/lib/postgresql/data/pg_dump.sql"
         resources:
           requests:
             cpu: 500m
@@ -47,4 +44,3 @@ metadata:
   name: postgres-restore-config
 data:
   TARGET_DB: ${TARGET_DB}
-  PG_DUMP_PATH: ${PG_DUMP_PATH}

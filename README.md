@@ -12,22 +12,25 @@ Edit `postgres-infra/.env`:
 TARGET_DB=your_database_name
 ROLE_PASSWORD=your_secure_password
 
-# Dump file path (full path inside PostgreSQL pod)
-PG_DUMP_PATH=/var/lib/postgresql/data/pg_dump.sql
+# Local dump file to copy (path on your machine)
+LOCAL_DUMP_FILE=pg_dump.sql
 ```
 
-**Note:** You can change `PG_DUMP_PATH` if you want to use a different filename or location.
+**Note:** You can change `LOCAL_DUMP_FILE` to point to a different dump file (e.g., `my_backup.sql` or `/path/to/backup.dump`).
 
 ### 2. Add Your Database Dump
 
-Place your database dump in the project root and rename it to `pg_dump.sql`:
+Place your database dump in the project root:
 
 ```bash
 # If compressed, decompress first
 gunzip your-dump.sql.gz
 
-# Rename to pg_dump.sql
+# Option 1: Rename to pg_dump.sql (default)
 mv your-dump.sql pg_dump.sql
+
+# Option 2: Keep your filename and update LOCAL_DUMP_FILE in .env
+# LOCAL_DUMP_FILE=my_backup.sql
 ```
 
 **Supported formats:**
