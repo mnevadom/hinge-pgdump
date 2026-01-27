@@ -30,6 +30,9 @@ spec:
               key: TARGET_DB
         - name: DUMP_PATH_IN_PG_POD
           value: "/var/lib/postgresql/data/pg_dump.sql"
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
         resources:
           requests:
             cpu: 500m
@@ -37,6 +40,10 @@ spec:
           limits:
             cpu: 1
             memory: 2Gi
+      volumes:
+      - name: postgres-data
+        persistentVolumeClaim:
+          claimName: main-dev-data
 ---
 apiVersion: v1
 kind: ConfigMap
