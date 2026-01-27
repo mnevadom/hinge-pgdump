@@ -3,23 +3,16 @@ deploy:
     command: |
       echo "Deploying PostgreSQL via docker-compose..."
       okteto deploy --file postgres-infra/docker-compose.yml --wait
+      echo "✓ PostgreSQL deployed successfully"
 
-  - name: Deploy Dump Stager Resources
-    command: |
-      echo "Deploying dump stager PVC and pod..."
-      kubectl apply -f rds-dump-pod/dumps-pvc.yaml -n ${OKTETO_NAMESPACE}
-      kubectl apply -f rds-dump-pod/dump-stager-pod.yaml -n ${OKTETO_NAMESPACE}
-      echo "Waiting for dump-stager pod to be ready..."
-      kubectl wait --for=condition=ready pod/dump-stager -n ${OKTETO_NAMESPACE} --timeout=120s || echo "Pod may not be ready yet, continuing..."
-
-  - name: Copy Dump to Stager Pod
+  - name: Copy Dump to PostgreSQL Pod
     command: |
       echo "Checking if pg_dump.sql exists..."
       if [ ! -f "pg_dump.sql" ]; then
         echo "⚠️  Warning: pg_dump.sql not found in project root"
-        echo "⚠️  Skipping dump copy step"
+        echo "⚠️  Skipping dump copy and restore steps"
         echo "⚠️  To restore a dump later, place pg_dump.sql in project root and run:"
-        echo "    cd postgres-infra && ./1-copy-dump.sh"
+        echo "    cd postgres-infra && ./1-copy-dump.sh && ./2-restore-dump.sh"
         exit 0
       fi
 
@@ -27,25 +20,9 @@ deploy:
       cd postgres-infra
       ./1-copy-dump.sh
 
-  - name: Wait for Dump Staging
+  - name: Restore Database
     command: |
-      echo "Waiting for dump-stager pod to complete staging..."
-      kubectl wait --for=condition=complete pod/dump-stager -n ${OKTETO_NAMESPACE} --timeout=600s || {
-        echo "⚠️  Dump stager did not complete in time"
-        echo "Check logs with: kubectl logs dump-stager -n ${OKTETO_NAMESPACE}"
-        exit 1
-      }
-      echo "✓ Dump staged successfully to shared PVC"
-
-  - name: Trigger Restore Job
-    command: |
-      echo "Checking if restore job exists in restore-job folder..."
-      if [ -f "restore-job/pg-restore.yaml" ]; then
-        echo "Applying restore job..."
-        kubectl apply -f restore-job/pg-restore.yaml -n ${OKTETO_NAMESPACE}
-        echo "✓ Restore job submitted"
-        echo "Monitor with: kubectl logs -f job/pg-restore -n ${OKTETO_NAMESPACE}"
-      else
-        echo "ℹ️  No restore job found at restore-job/pg-restore.yaml"
-        echo "ℹ️  If you have a restore job in docker-compose, it should run automatically"
-      fi
+      echo "Running restore script..."
+      cd postgres-infra
+      ./2-restore-dump.sh
+      echo "✓ Database restore completed"
