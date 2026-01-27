@@ -37,6 +37,11 @@ deploy:
       echo "Running copy script..."
       ./1-copy-dump.sh
 
+      echo ""
+      echo "Waiting a few seconds for file to sync across mounts..."
+      sleep 10
+      echo "✓ Ready to start restore job"
+
   - name: Restore Database
     command: |
       echo "Starting database restore job..."

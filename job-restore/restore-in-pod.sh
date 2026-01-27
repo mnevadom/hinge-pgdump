@@ -29,6 +29,34 @@ done
 echo -e "${GREEN}✓ PostgreSQL is ready${NC}"
 echo ""
 
+# Wait for dump file to be available
+echo "Waiting for dump file to be available..."
+WAIT_COUNT=0
+MAX_WAIT=60
+while [ ! -f "$DUMP_PATH" ] && [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+  echo "Dump file not found yet, waiting... ($WAIT_COUNT/$MAX_WAIT)"
+  sleep 5
+  WAIT_COUNT=$((WAIT_COUNT + 1))
+done
+
+if [ ! -f "$DUMP_PATH" ]; then
+  echo -e "${RED}✗ Dump file not found after waiting${NC}"
+  echo "Expected location: $DUMP_PATH"
+  echo ""
+  echo "Contents of /var/lib/postgresql/data:"
+  ls -lah /var/lib/postgresql/data || echo "Cannot list directory"
+  echo ""
+  echo "Please ensure:"
+  echo "1. Copy step completed successfully (check logs)"
+  echo "2. Dump file was copied to the correct location"
+  echo "3. PVC is properly mounted"
+  exit 1
+fi
+
+echo -e "${GREEN}✓ Dump file found: $DUMP_PATH${NC}"
+ls -lh "$DUMP_PATH"
+echo ""
+
 # Try custom format first with pg_restore
 echo -e "${YELLOW}Attempting restore with pg_restore (custom format)...${NC}"
 if pg_restore -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE \
