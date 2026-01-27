@@ -12,17 +12,15 @@ deploy:
         echo "⚠️  Warning: pg_dump.sql not found in project root"
         echo "⚠️  Skipping dump copy and restore steps"
         echo "⚠️  To restore a dump later, place pg_dump.sql in project root and run:"
-        echo "    cd postgres-infra && ./1-copy-dump.sh && ./2-restore-dump.sh"
+        echo "    ./1-copy-dump.sh && ./2-restore-dump.sh"
         exit 0
       fi
 
       echo "Running copy script..."
-      cd postgres-infra
       ./1-copy-dump.sh
 
   - name: Restore Database
     command: |
       echo "Running restore script..."
-      cd postgres-infra
       ./2-restore-dump.sh
       echo "✓ Database restore completed"

@@ -6,16 +6,14 @@ This project deploys a PostgreSQL 13 database on Okteto with support for restori
 
 ```
 .
-├── okteto.yml                      # Okteto manifest deploying from docker-compose
+├── okteto.yml                      # Okteto manifest with automated deployment
 ├── pg_dump.sql                     # Your PostgreSQL dump file (place here)
-├── postgres-infra/                 # PostgreSQL infrastructure directory
+├── 1-copy-dump.sh                  # Step 1: Copy dump to PostgreSQL pod
+├── 2-restore-dump.sh               # Step 2: Restore database
+├── postgres-infra/                 # PostgreSQL infrastructure
 │   ├── docker-compose.yml          # PostgreSQL service definition
 │   ├── .env                        # Environment variables
-│   ├── 1-copy-dump.sh              # Step 1: Copy dump to volume
-│   ├── 2-restore-dump.sh           # Step 2: Restore from volume
-│   ├── restore-dump-all-in-one.sh  # Combined copy + restore
-│   ├── test-connection.sh          # Test database connection
-│   └── README.md                   # PostgreSQL-specific docs
+│   └── test-connection.sh          # Test database connection
 └── README.md                       # This file
 ```
 
@@ -25,98 +23,93 @@ This project deploys a PostgreSQL 13 database on Okteto with support for restori
 - kubectl configured
 - Your PostgreSQL dump file renamed to `pg_dump.sql` in the project root
 
+## Quick Start
+
+### 1. Place Your Dump File
+
+```bash
+# If your dump is compressed, decompress it first
+gunzip your-dump.sql.gz
+
+# Place in project root as pg_dump.sql
+mv your-dump.sql pg_dump.sql
+```
+
+### 2. Deploy Everything
+
+```bash
+okteto deploy --wait
+```
+
+This single command will:
+1. Deploy PostgreSQL with 70GB persistent volume
+2. Copy `pg_dump.sql` to the PostgreSQL pod (if present)
+3. Restore the database automatically
+
+If `pg_dump.sql` is not present, only PostgreSQL will be deployed.
+
+## Manual Step-by-Step Process
+
+If you prefer to run steps manually:
+
+### 1. Deploy PostgreSQL
+
+```bash
+okteto deploy --file postgres-infra/docker-compose.yml --wait
+```
+
+### 2. Copy Dump to Pod
+
+```bash
+./1-copy-dump.sh
+```
+
+This copies `pg_dump.sql` to `/var/lib/postgresql/data/` in the PostgreSQL pod.
+Time estimate: 30-60 minutes for 100GB dump.
+
+### 3. Restore Database
+
+```bash
+./2-restore-dump.sh
+```
+
+This restores the database from the dump in the PostgreSQL pod.
+Time estimate: 2-4 hours for 100GB dump.
+
 ## Configuration
 
-Edit the `postgres-infra/.env` file to configure your database:
+Edit `postgres-infra/.env` to configure your database:
 
 ```bash
 TARGET_DB=mydatabase           # Your database name
 ROLE_PASSWORD=mysecretpassword # PostgreSQL password
 ```
 
-## Deployment
-
-Deploy the PostgreSQL service to Okteto:
-
+After changing, redeploy:
 ```bash
 okteto deploy --wait
 ```
 
-This will:
-- Create a PostgreSQL 13 instance
-- Set up a 70GB persistent volume
-- Configure optimized PostgreSQL settings for large databases
-- Expose PostgreSQL on port 5432
+## Database Configuration
 
-## Restoring Your Database Dump
-
-### 1. Prepare Your Dump File
-
-Place your PostgreSQL dump file in the project root and name it `pg_dump.sql`:
-
-```bash
-# If your dump is compressed, decompress it first
-gunzip your-dump.sql.gz
-
-# Rename to pg_dump.sql
-mv your-dump.sql pg_dump.sql
-```
-
-### 2. Run the Restore Scripts
-
-**Option A: Two-Step Process (Recommended for Large Dumps)**
-
-Step 1 - Copy the dump to the persistent volume:
-```bash
-cd postgres-infra
-./1-copy-dump.sh
-```
-
-Step 2 - Restore the database:
-```bash
-./2-restore-dump.sh
-```
-
-**Option B: All-in-One Process**
-
-For convenience, run both steps together:
-```bash
-cd postgres-infra
-./restore-dump-all-in-one.sh
-```
-
-### Why Two Separate Scripts?
-
-The two-step approach is recommended because:
-- **Better progress tracking**: See when copy completes before restore starts
-- **Error recovery**: Fix issues between steps without starting over
-- **Verification**: Inspect dump in pod before restoring
-- **Flexibility**: Re-run restore without re-copying if it fails
-- **Time savings**: For 100GB dump, copy takes 30-60 min, restore takes 2-4 hours
-
-**Important**: The dump file is copied directly to the persistent volume at `/var/lib/postgresql/data`, not to temporary storage. This ensures all operations use the volume resources instead of consuming node ephemeral storage.
-
-### 3. Monitor Progress
-
-For large dumps, you can monitor progress in another terminal:
-
-```bash
-# Watch pod logs
-kubectl logs -f -n ${OKTETO_NAMESPACE} -l stack.okteto.com/service=main-dev-db
-
-# Check resource usage
-kubectl top pod -n ${OKTETO_NAMESPACE}
-```
+The PostgreSQL instance is configured with:
+- **max_wal_size**: 4GB (for large transactions)
+- **checkpoint_timeout**: 15min (optimized for bulk operations)
+- **Storage**: 70GB persistent volume
+- **Resources**:
+  - Requests: 500m CPU, 2Gi memory
+  - Limits: 2 CPU, 8Gi memory
 
 ## Accessing the Database
 
 ### From within the cluster:
 
 ```bash
-kubectl exec -it -n ${OKTETO_NAMESPACE} -l stack.okteto.com/service=main-dev-db -- psql -U postgres -d mydatabase
+kubectl exec -it -n ${OKTETO_NAMESPACE} -l stack.okteto.com/service=main-dev-db -- \
+  psql -U postgres -d mydatabase
 ```
 
-### Port forwarding to access locally:
+### Port forwarding for local access:
 
 ```bash
 kubectl port-forward -n ${OKTETO_NAMESPACE} svc/main-dev-db 5432:5432
@@ -127,15 +120,48 @@ Then connect with:
 psql -h localhost -U postgres -d mydatabase
 ```
 
-## Database Configuration
+### Test connection:
 
-The PostgreSQL instance is configured with:
-- **max_wal_size**: 4GB (for large transactions)
-- **checkpoint_timeout**: 15min (optimized for bulk operations)
-- **Storage**: 70GB persistent volume (adjustable based on your namespace quota)
-- **Resources**:
-  - Requests: 500m CPU, 2Gi memory
-  - Limits: 2 CPU, 8Gi memory
+```bash
+cd postgres-infra
+./test-connection.sh
+```
+
+## Storage Strategy
+
+Dumps are copied to the **persistent volume** at `/var/lib/postgresql/data/`:
+
+✅ **Benefits:**
+- Uses persistent volume storage (not node ephemeral storage)
+- Dump remains available after restore
+- No risk of consuming node disk space
+- Optimal for 100GB+ dumps
+
+**Manage dump file:**
+```bash
+# View dump in pod
+kubectl exec -n ${OKTETO_NAMESPACE} -l stack.okteto.com/service=main-dev-db -- \
+  ls -lh /var/lib/postgresql/data/pg_dump.sql
+
+# Check disk usage
+kubectl exec -n ${OKTETO_NAMESPACE} -l stack.okteto.com/service=main-dev-db -- \
+  df -h /var/lib/postgresql/data
+
+# Remove dump to free space
+kubectl exec -n ${OKTETO_NAMESPACE} -l stack.okteto.com/service=main-dev-db -- \
+  rm /var/lib/postgresql/data/pg_dump.sql
+```
+
+## Time Estimates
+
+| Dump Size | Copy Time | Restore Time | Total Time |
+|-----------|-----------|--------------|------------|
+| 1 GB      | 1-2 min   | 5-10 min     | ~15 min    |
+| 10 GB     | 5-15 min  | 20-40 min    | ~1 hour    |
+| 50 GB     | 20-40 min | 1-2 hours    | ~2-3 hours |
+| 100 GB    | 30-60 min | 2-4 hours    | ~3-5 hours |
+
+*Times vary based on network speed, data complexity, and cluster load*
 
 ## Troubleshooting
 
@@ -156,32 +182,9 @@ kubectl exec -n ${OKTETO_NAMESPACE} -l stack.okteto.com/service=main-dev-db -- d
 
 ### Verify database contents:
 ```bash
-kubectl exec -n ${OKTETO_NAMESPACE} -l stack.okteto.com/service=main-dev-db -- psql -U postgres -d mydatabase -c "\dt"
+kubectl exec -n ${OKTETO_NAMESPACE} -l stack.okteto.com/service=main-dev-db -- \
+  psql -U postgres -d mydatabase -c "\dt"
 ```
-
-### Test connection:
-```bash
-cd postgres-infra
-./test-connection.sh
-```
-
-## Performance Tips for Large Dumps
-
-1. **Use the two-step process**: Allows you to verify copy completed before starting restore
-2. **Monitor restore progress**: The restore process will show output in real-time
-3. **Ensure sufficient memory**: The pod has up to 8Gi available
-4. **Patience**: A 100GB dump can take 3-5 hours total (copy + restore)
-
-## Time Estimates
-
-| Dump Size | Copy Time | Restore Time | Total Time |
-|-----------|-----------|--------------|------------|
-| 1 GB      | 1-2 min   | 5-10 min     | ~15 min    |
-| 10 GB     | 5-15 min  | 20-40 min    | ~1 hour    |
-| 50 GB     | 20-40 min | 1-2 hours    | ~2-3 hours |
-| 100 GB    | 30-60 min | 2-4 hours    | ~3-5 hours |
-
-*Times vary based on network speed, data complexity, and cluster load*
 
 ## Cleaning Up
 
@@ -193,22 +196,15 @@ okteto destroy
 
 ⚠️ **Warning**: This will delete all data including the persistent volume.
 
-## Environment Variables Available
+## Environment Variables
 
 - `OKTETO_NAMESPACE`: Your Okteto namespace (automatically set)
 - `TARGET_DB`: Database name (set in postgres-infra/.env)
 - `ROLE_PASSWORD`: PostgreSQL password (set in postgres-infra/.env)
-
-## Additional Documentation
-
-- **[postgres-infra/README.md](postgres-infra/README.md)** - Detailed PostgreSQL documentation
-- **[QUICKSTART.md](QUICKSTART.md)** - Quick start guide
-- **[WORKFLOW.md](WORKFLOW.md)** - Detailed workflow diagrams
-- **[VOLUME_STORAGE.md](VOLUME_STORAGE.md)** - Storage strategy explanation
 
 ## Support
 
 For issues with:
 - **Okteto deployment**: Check [Okteto Documentation](https://www.okteto.com/docs)
 - **PostgreSQL**: Check logs with `kubectl logs`
-- **Dump restore**: See postgres-infra/README.md for detailed troubleshooting
+- **Dump restore**: Ensure dump format is compatible with PostgreSQL 13

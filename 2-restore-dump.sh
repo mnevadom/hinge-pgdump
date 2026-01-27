@@ -16,7 +16,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}=== PostgreSQL Dump Restore Script (Step 2/2) ===${NC}"
+echo -e "${GREEN}=== PostgreSQL Dump Restore Script ===${NC}"
 echo ""
 
 # Find the postgres pod

@@ -14,19 +14,19 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}=== PostgreSQL Dump Copy Script (Step 1/2) ===${NC}"
+echo -e "${GREEN}=== PostgreSQL Dump Copy Script ===${NC}"
 echo ""
 
-# Check if dump file exists in parent directory
-if [ ! -f "../$DUMP_FILE" ]; then
-    echo -e "${RED}Error: Dump file '../$DUMP_FILE' not found!${NC}"
+# Check if dump file exists
+if [ ! -f "$DUMP_FILE" ]; then
+    echo -e "${RED}Error: Dump file '$DUMP_FILE' not found!${NC}"
     echo "Please ensure you have a file named 'pg_dump.sql' in the project root directory"
-    echo "Expected location: $(pwd)/../$DUMP_FILE"
+    echo "Expected location: $(pwd)/$DUMP_FILE"
     exit 1
 fi
 
 # Get file size
-DUMP_SIZE=$(du -h "../$DUMP_FILE" | cut -f1)
+DUMP_SIZE=$(du -h "$DUMP_FILE" | cut -f1)
 echo -e "${YELLOW}Dump file size: ${DUMP_SIZE}${NC}"
 echo ""
 
@@ -57,17 +57,6 @@ if kubectl exec -n "$NAMESPACE" "$POD_NAME" -- test -f "$RESTORE_PATH/$DUMP_FILE
     echo -e "${YELLOW}Warning: Dump file already exists in pod!${NC}"
     echo "Location: $RESTORE_PATH/$DUMP_FILE"
     echo ""
-    read -p "Do you want to overwrite it? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Copy cancelled. Using existing dump file."
-        echo ""
-        echo "To verify the existing file:"
-        echo "  kubectl exec -n $NAMESPACE $POD_NAME -- ls -lh $RESTORE_PATH/$DUMP_FILE"
-        echo ""
-        echo "To proceed with restore, run: ./2-restore-dump.sh"
-        exit 0
-    fi
     echo "Overwriting existing dump file..."
     echo ""
 fi
@@ -77,8 +66,8 @@ echo "This may take several minutes for large files (10-60 min for 100GB)"
 echo "Destination: $RESTORE_PATH/$DUMP_FILE"
 echo ""
 
-# Copy with progress indication
-kubectl cp "../$DUMP_FILE" "$NAMESPACE/$POD_NAME:$RESTORE_PATH/$DUMP_FILE"
+# Copy to the PostgreSQL pod's persistent volume
+kubectl cp "$DUMP_FILE" "$NAMESPACE/$POD_NAME:$RESTORE_PATH/$DUMP_FILE"
 
 if [ $? -eq 0 ]; then
     echo ""
@@ -104,5 +93,4 @@ echo "Dump file location: $RESTORE_PATH/$DUMP_FILE"
 echo "File is stored in the persistent volume (not consuming node resources)"
 echo ""
 echo -e "${GREEN}Next step: Run the restore script${NC}"
-echo "  cd postgres-infra"
 echo "  ./2-restore-dump.sh"
