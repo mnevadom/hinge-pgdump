@@ -8,68 +8,68 @@ This directory contains all PostgreSQL-related infrastructure and scripts for de
 postgres-infra/
 ├── docker-compose.yml              # PostgreSQL service definition
 ├── .env                            # Database configuration
-├── 1-copy-dump.sh                  # Copy dump to dump-stager pod
+├── 1-copy-dump.sh                  # Step 1: Copy dump to persistent volume
+├── 2-restore-dump.sh               # Step 2: Restore dump from volume
+├── restore-dump-all-in-one.sh     # Combined: Copy + Restore in one script
 ├── test-connection.sh              # Test database connectivity
 └── README.md                       # This file
 ```
 
 ## Quick Start
 
-### 1. Deploy PostgreSQL
+### Option 1: Two-Step Process (Recommended for Large Dumps)
 
-From project root:
-```bash
-okteto deploy --wait
-```
+This approach separates copying and restoring, allowing you to verify the copy completed successfully before starting the restore.
 
-### 2. Deploy Dump Stager Pod
-
-The dump-stager pod is required to receive and stage the database dump:
-
-```bash
-kubectl apply -f rds-dump-pod/dumps-pvc.yaml -n ${OKTETO_NAMESPACE}
-kubectl apply -f rds-dump-pod/dump-stager-pod.yaml -n ${OKTETO_NAMESPACE}
-```
-
-### 3. Copy Your Dump
-
-Place your dump file in project root:
-```bash
-# From project root
-mv /path/to/your-database.sql pg_dump.sql
-```
-
-Then copy it to the dump-stager pod:
+**Step 1: Copy the dump file to the persistent volume**
 ```bash
 cd postgres-infra
 ./1-copy-dump.sh
 ```
 
 This script will:
-- Find the dump-stager pod automatically
-- Copy `pg_dump.sql` from project root to `/input/db.dump` in the pod
+- Find your PostgreSQL pod automatically
+- Copy `pg_dump.sql` from project root to `/var/lib/postgresql/data` in the pod
 - Verify the file was copied successfully
-- The dump-stager pod will then process it and copy to the shared PVC
+- Check available disk space
+- Take 10-60 minutes for a 100GB dump
 
-### 4. Restore Happens Automatically
-
-Your restore job (defined in docker-compose.yml) should automatically:
-- Pick up the dump from the shared PVC
-- Restore it into the PostgreSQL database
-
-## Workflow
-
+**Step 2: Restore the database from the volume**
+```bash
+./2-restore-dump.sh
 ```
-1. Place dump in project root (pg_dump.sql)
-                ↓
-2. Run ./1-copy-dump.sh
-                ↓
-3. Dump copied to dump-stager pod (/input/db.dump)
-                ↓
-4. dump-stager processes and stages to shared PVC (/dumps/db.dump)
-                ↓
-5. Your restore job picks it up and restores to PostgreSQL
+
+This script will:
+- Verify the dump file exists in the pod
+- Check available disk space
+- Restore the database using psql
+- Show database statistics
+- Take 1-3+ hours for a 100GB dump
+
+### Option 2: All-in-One Process
+
+For convenience, you can use the combined script:
+
+```bash
+cd postgres-infra
+./restore-dump-all-in-one.sh
 ```
+
+This runs both copy and restore in sequence.
+
+## Prerequisites
+
+1. **Deploy PostgreSQL first:**
+   ```bash
+   # From project root
+   okteto deploy --wait
+   ```
+
+2. **Place your dump file in project root:**
+   ```bash
+   # From project root
+   mv /path/to/your-database.sql pg_dump.sql
+   ```
 
 ## Configuration
 
@@ -101,34 +101,54 @@ To verify PostgreSQL is running and accessible:
 - Scripts: `postgres-infra/*.sh`
 - Config: `postgres-infra/.env`
 
-### Inside dump-stager Pod:
-- Input: `/input/db.dump` (where your dump is copied)
-- Output: `/dumps/db.dump` (staged to shared PVC)
-
-### Inside PostgreSQL Pod:
+### Inside the Pod:
+- Dump file: `/var/lib/postgresql/data/pg_dump.sql`
 - Database data: `/var/lib/postgresql/data/`
-- Shared dumps PVC: `/dumps/` (if mounted)
+- All stored in persistent volume (70Gi)
 
 ## Important Notes
 
-### Script Updates
+### Why Two Separate Scripts?
 
-The `1-copy-dump.sh` script now:
-- Copies to the **dump-stager pod** at `/input/db.dump`
-- No longer copies directly to PostgreSQL pod
-- The dump-stager pod handles staging to the shared PVC
-- Your restore job handles the actual database restore
+1. **Better Progress Tracking**: See when copy completes before restore starts
+2. **Error Recovery**: If copy fails, fix issues before attempting restore
+3. **Verification**: Inspect the dump file in the pod before restoring
+4. **Flexibility**: Re-run restore without re-copying if it fails
+5. **Resource Management**: Monitor disk space between steps
 
-### Why This Approach?
+### Storage Strategy
 
-1. **Separation of concerns**: Copy, staging, and restore are separate steps
-2. **Shared PVC**: Multiple pods can access the same dump
-3. **Automated restore**: Your job handles restore logic
-4. **Reusable**: Can stage dumps from various sources (local, S3, RDS, etc.)
+The dump file is copied to the **persistent volume** at `/var/lib/postgresql/data`, not to `/tmp`:
+
+✅ **Benefits:**
+- Uses persistent volume storage (not node ephemeral storage)
+- Dump remains available after restore for future reference
+- No risk of consuming node disk space
+- Better for 100GB+ dumps
+
+### Managing the Dump File
+
+**View the dump in pod:**
+```bash
+kubectl exec -n ${OKTETO_NAMESPACE} -l stack.okteto.com/service=main-dev-db -- \
+  ls -lh /var/lib/postgresql/data/pg_dump.sql
+```
+
+**Check disk usage:**
+```bash
+kubectl exec -n ${OKTETO_NAMESPACE} -l stack.okteto.com/service=main-dev-db -- \
+  df -h /var/lib/postgresql/data
+```
+
+**Remove dump to free space:**
+```bash
+kubectl exec -n ${OKTETO_NAMESPACE} -l stack.okteto.com/service=main-dev-db -- \
+  rm /var/lib/postgresql/data/pg_dump.sql
+```
 
 ## Time Estimates
 
-### Copy to dump-stager (1-copy-dump.sh)
+### Step 1: Copy (1-copy-dump.sh)
 | Dump Size | Copy Time |
 |-----------|-----------|
 | 1 GB      | 1-2 min   |
@@ -136,8 +156,15 @@ The `1-copy-dump.sh` script now:
 | 50 GB     | 20-40 min |
 | 100 GB    | 30-60 min |
 
-### Staging & Restore
-Time varies based on your restore job configuration.
+### Step 2: Restore (2-restore-dump.sh)
+| Dump Size | Restore Time |
+|-----------|--------------|
+| 1 GB      | 5-10 min     |
+| 10 GB     | 20-40 min    |
+| 50 GB     | 1-2 hours    |
+| 100 GB    | 2-4 hours    |
+
+*Times vary based on network speed, data complexity, and cluster load*
 
 ## Troubleshooting
 
@@ -150,41 +177,37 @@ ls -lh ../pg_dump.sql
 cp /path/to/your-dump.sql ../pg_dump.sql
 ```
 
-### Script can't find dump-stager pod
+### Script can't find pod
 ```bash
-# Check if pod exists
+# Check if PostgreSQL is deployed
 kubectl get pods -n ${OKTETO_NAMESPACE}
 
-# If not deployed, deploy it
-kubectl apply -f ../rds-dump-pod/dumps-pvc.yaml -n ${OKTETO_NAMESPACE}
-kubectl apply -f ../rds-dump-pod/dump-stager-pod.yaml -n ${OKTETO_NAMESPACE}
-```
-
-### dump-stager pod already completed
-```bash
-# Delete and recreate the pod
-kubectl delete pod dump-stager -n ${OKTETO_NAMESPACE}
-kubectl apply -f ../rds-dump-pod/dump-stager-pod.yaml -n ${OKTETO_NAMESPACE}
-
-# Then run copy script again
-./1-copy-dump.sh
+# If not deployed
+cd .. && okteto deploy --wait
 ```
 
 ### Out of disk space
 ```bash
-# Check dump-stager storage
-kubectl exec -n ${OKTETO_NAMESPACE} dump-stager -- df -h
+# Check current usage
+kubectl exec -n ${OKTETO_NAMESPACE} -l stack.okteto.com/service=main-dev-db -- \
+  df -h /var/lib/postgresql/data
 
-# Check shared PVC
-kubectl exec -n ${OKTETO_NAMESPACE} dump-stager -- df -h /dumps
-
-# Increase volume size in rds-dump-pod/dumps-pvc.yaml if needed
+# Increase volume size in docker-compose.yml
+# Then redeploy
+cd .. && okteto deploy --wait
 ```
 
-### Monitor dump-stager processing
+### Copy completed but restore fails
 ```bash
-# Watch the dump-stager pod logs
-kubectl logs -f dump-stager -n ${OKTETO_NAMESPACE}
+# Verify dump file is in pod
+kubectl exec -n ${OKTETO_NAMESPACE} -l stack.okteto.com/service=main-dev-db -- \
+  ls -lh /var/lib/postgresql/data/pg_dump.sql
+
+# Check PostgreSQL logs
+kubectl logs -n ${OKTETO_NAMESPACE} -l stack.okteto.com/service=main-dev-db
+
+# Re-run restore (no need to re-copy)
+./2-restore-dump.sh
 ```
 
 ## Database Access
@@ -238,16 +261,17 @@ volumes:
 
 - [Parent README](../README.md) - Complete project documentation
 - [Quickstart Guide](../QUICKSTART.md) - Fast setup instructions
-- [RDS Dump Pod](../rds-dump-pod/README.md) - Dump stager documentation
+- [Workflow Details](../WORKFLOW.md) - Detailed process diagrams
+- [Volume Storage](../VOLUME_STORAGE.md) - Storage strategy explanation
 - [Okteto Documentation](https://www.okteto.com/docs) - Official docs
 
 ## Summary
 
-This directory contains the PostgreSQL service configuration. The workflow is:
+This directory contains everything needed to deploy and manage PostgreSQL in Okteto:
 
 1. **Deploy**: PostgreSQL automatically deploys via Okteto manifest
-2. **Stage**: Deploy dump-stager pod to receive dumps
-3. **Copy**: Use `1-copy-dump.sh` to copy your dump to dump-stager
-4. **Restore**: Your restore job automatically restores the database
+2. **Copy**: Use `1-copy-dump.sh` to copy your dump to the persistent volume
+3. **Restore**: Use `2-restore-dump.sh` to restore the database
+4. **Access**: Use `test-connection.sh` or kubectl to access the database
 
-The dump flows through the dump-stager pod to a shared PVC, where your restore job picks it up and loads it into PostgreSQL.
+All data is stored in a persistent 70Gi volume, ensuring durability and avoiding node resource consumption.
