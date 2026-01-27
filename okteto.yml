@@ -1,6 +1,6 @@
 build:
   restore-job:
-    context: .
+    context: job-restore
     dockerfile: Dockerfile
 
 deploy:
@@ -41,7 +41,7 @@ deploy:
       fi
 
       # Create ConfigMap with database name
-      envsubst < k8s/restore-job.yaml | kubectl apply -n ${OKTETO_NAMESPACE} -f -
+      envsubst < job-restore/restore-job.yaml | kubectl apply -n ${OKTETO_NAMESPACE} -f -
 
       echo "✓ Restore job created"
       echo ""

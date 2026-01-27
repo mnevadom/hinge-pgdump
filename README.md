@@ -46,10 +46,10 @@ This will:
 **That's it!** The restore job will run unattended in the cluster. You can disconnect and check back later.
 
 **How it works:**
-1. Okteto builds a custom Docker image with the restore script
+1. Okteto builds a custom Docker image from `job-restore/` folder
 2. The Job runs this image, which mounts the same PVC as PostgreSQL
 3. The restore script connects to PostgreSQL remotely and restores the dump
-4. All logic is contained in `scripts/restore-in-pod.sh` (single source of truth)
+4. All logic is self-contained in the `job-restore/` folder
 
 ### Monitor Restore Progress
 
@@ -159,9 +159,10 @@ okteto destroy
 
 **Files:**
 - `okteto.yml` - Deployment automation with image build
-- `Dockerfile` - Custom image with restore script
-- `scripts/restore-in-pod.sh` - Restore script for Job (runs in cluster)
-- `k8s/restore-job.yaml` - Kubernetes Job manifest
+- `job-restore/` - Restore Job self-contained folder
+  - `Dockerfile` - Custom image definition
+  - `restore-in-pod.sh` - Restore script (runs in cluster)
+  - `restore-job.yaml` - Kubernetes Job manifest
 - `pg_dump.sql` - Your database dump (add this)
 - `postgres-infra/docker-compose.yml` - PostgreSQL service
 - `postgres-infra/.env` - Database configuration
