@@ -4,28 +4,6 @@ build:
     dockerfile: Dockerfile
 
 deploy:
-  - name: Load Environment Variables
-    command: |
-      echo "Loading environment variables..."
-
-      # Load variables from Okteto admin panel if available
-      if [ -f "$OKTETO_ENV" ]; then
-        echo "Loading variables from Okteto admin panel..."
-        set -a
-        source "$OKTETO_ENV"
-        set +a
-      fi
-
-      # Load local .env file
-      if [ -f "postgres-infra/.env" ]; then
-        echo "Loading variables from postgres-infra/.env..."
-        set -a
-        source "postgres-infra/.env"
-        set +a
-      fi
-
-      echo "✓ Environment variables loaded"
-
   - name: Clean Previous PostgreSQL Deployment
     command: |
       echo "Cleaning up any previous PostgreSQL deployment..."
@@ -35,7 +13,7 @@ deploy:
   - name: Deploy PostgreSQL Compose
     command: |
       echo "Deploying PostgreSQL via docker-compose..."
-      okteto deploy --file postgres-infra/docker-compose.yml --wait
+      envsubst < postgres-infra/docker-compose.yml | okteto deploy --file - --wait
       echo "✓ PostgreSQL deployed successfully"
 
   - name: Copy Dump to PostgreSQL Pod
@@ -59,23 +37,8 @@ deploy:
   - name: Restore Database
     command: |
       echo "Starting database restore job..."
-      echo ""
 
-      # Load environment variables from Okteto admin panel
-      if [ -f "$OKTETO_ENV" ]; then
-        set -a
-        source "$OKTETO_ENV"
-        set +a
-      fi
-
-      # Load environment variables from local .env
-      if [ -f "postgres-infra/.env" ]; then
-        set -a
-        source "postgres-infra/.env"
-        set +a
-      fi
-
-      # Create ConfigMap and Job (envsubst will replace variables)
+      # Create ConfigMap and Job with environment variable substitution
       envsubst < job-restore/restore-job.yaml | kubectl apply -n ${OKTETO_NAMESPACE} -f -
 
       echo "✓ Restore job created and running in background"

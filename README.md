@@ -4,27 +4,19 @@ Simple project to deploy PostgreSQL 13 and restore your database dump on Okteto.
 
 ## Setup Steps
 
-### 1. Configure Database Settings
+### 1. Configure Database Settings in Okteto Admin Panel
 
-**Option A: Local configuration file**
+Add the following environment variables in the Okteto admin panel:
 
-Edit `postgres-infra/.env`:
+**Required variables:**
+- `TARGET_DB` - Your database name (e.g., `mydatabase`)
+- `ROLE_PASSWORD` - PostgreSQL password (e.g., `your_secure_password`)
 
-```bash
-TARGET_DB=your_database_name
-ROLE_PASSWORD=your_secure_password
-```
-
-**Option B: Okteto Admin Panel (recommended for secrets)**
-
-You can also add environment variables through the Okteto admin panel. Variables added there will be automatically loaded during deployment.
-
-Example variables to add in Okteto admin panel:
-- `TARGET_DB` - Database name
-- `ROLE_PASSWORD` - PostgreSQL password
-- `LOCAL_DUMP_FILE` - Custom dump file path (optional, defaults to `pg_dump.sql`)
-
-Variables from both sources are merged, with Okteto admin panel variables taking precedence.
+**How to add variables:**
+1. Go to your Okteto namespace settings
+2. Navigate to "Variables" or "Environment Variables"
+3. Add each variable with its value
+4. Variables are automatically loaded during deployment via `envsubst`
 
 ### 2. Add Your Database Dump
 

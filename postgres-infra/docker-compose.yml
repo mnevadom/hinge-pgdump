@@ -6,9 +6,9 @@ services:
           "-c", "max_wal_size=4GB",
           "-c", "checkpoint_timeout=15min"]
     environment:
-      POSTGRES_DB: ${TARGET_DB:-mydatabase}
+      POSTGRES_DB: ${TARGET_DB}
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${ROLE_PASSWORD:-mysecretpassword}
+      POSTGRES_PASSWORD: ${ROLE_PASSWORD}
       POSTGRES_HOST_AUTH_METHOD: trust
     ports:
       - "5432:5432"

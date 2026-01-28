@@ -5,11 +5,11 @@
 
 set -e
 
-PGHOST="${PGHOST:-main-dev-db}"
-PGPORT="${PGPORT:-5432}"
-PGUSER="${PGUSER:-postgres}"
-PGDATABASE="${PGDATABASE:-mydatabase}"
-DUMP_PATH="${DUMP_PATH_IN_PG_POD:-/var/lib/postgresql/data/pg_dump.sql}"
+PGHOST="${PGHOST}"
+PGPORT="${PGPORT}"
+PGUSER="${PGUSER}"
+PGDATABASE="${PGDATABASE}"
+DUMP_PATH="${DUMP_PATH_IN_PG_POD}"
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
