@@ -18,17 +18,16 @@ deploy:
 
   - name: Copy Dump to PostgreSQL Pod
     command: |
-      echo "Checking if pg_dump.sql exists..."
-      if [ ! -f "pg_dump.sql" ]; then
-        echo "⚠️  Warning: pg_dump.sql not found in project root"
-        echo "⚠️  Skipping dump copy and restore steps"
-        echo "⚠️  To restore a dump later, place pg_dump.sql in project root and run:"
+      echo "Running copy script..."
+      echo "Note: If pg_dump.sql doesn't exist, the script will show an error"
+      ./1-copy-dump.sh || {
+        echo ""
+        echo "⚠️  Copy script failed or pg_dump.sql not found"
+        echo "⚠️  Skipping restore step"
+        echo "⚠️  To restore later, place pg_dump.sql in project root and run:"
         echo "    ./1-copy-dump.sh"
         exit 0
-      fi
-
-      echo "Running copy script..."
-      ./1-copy-dump.sh
+      }
 
       echo ""
       echo "Waiting a few seconds for file to sync across mounts..."
