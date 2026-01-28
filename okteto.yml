@@ -13,7 +13,7 @@ deploy:
   - name: Deploy PostgreSQL Compose
     command: |
       echo "Deploying PostgreSQL via docker-compose..."
-      envsubst < postgres-infra/docker-compose.yml | okteto deploy --file - --wait
+      okteto deploy --file postgres-infra/docker-compose.yml --wait
       echo "✓ PostgreSQL deployed successfully"
 
   - name: Copy Dump to PostgreSQL Pod
