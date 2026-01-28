@@ -1,44 +1,78 @@
 # PostgreSQL Database Restore on Okteto
 
-Simple project to deploy PostgreSQL 13 and restore your database dump on Okteto.
+Restore large PostgreSQL 13 database dumps (100GB+) on Okteto.
 
-## Setup Steps
+## Architecture
 
-### 1. Configure Database Settings in Okteto Admin Panel
-
-Add the following environment variables in the Okteto admin panel:
-
-**Required variables:**
-- `TARGET_DB` - Your database name (e.g., `mydatabase`)
-- `ROLE_PASSWORD` - PostgreSQL password (e.g., `your_secure_password`)
-
-**Optional variables:**
-- `LOCAL_DUMP_FILE` - Path/name of dump file to copy (default: `pg_dump.sql`)
-  - Examples: `my_backup.sql`, `dumps/production.dump`, `/path/to/backup.sql`
-
-**How to add variables:**
-1. Go to your Okteto namespace settings
-2. Navigate to "Variables" or "Environment Variables"
-3. Add each variable with its value
-4. Variables are automatically loaded during deployment via `envsubst`
-
-### 2. Add Your Database Dump
-
-Place your database dump in the project root and rename it to `pg_dump.sql`:
-
-```bash
-# If compressed, decompress first
-gunzip your-dump.sql.gz
-
-# Rename to pg_dump.sql
-mv your-dump.sql pg_dump.sql
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Okteto Deployment                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                               │
+│  Step 1: Deploy PostgreSQL                                   │
+│  ┌────────────────────────────┐                              │
+│  │   PostgreSQL 13 Pod        │                              │
+│  │   - 2 CPU / 8GB RAM        │                              │
+│  │   - Optimized settings     │                              │
+│  └─────────┬──────────────────┘                              │
+│            │                                                  │
+│            ↓                                                  │
+│  ┌────────────────────────────┐                              │
+│  │   PVC (70GB)               │                              │
+│  │   /var/lib/postgresql/data │                              │
+│  └────────────────────────────┘                              │
+│                                                               │
+│  Step 2: Copy Dump File                                      │
+│  ┌────────────────────────────┐                              │
+│  │   Your Machine             │                              │
+│  │   pg_dump.sql (100GB)      │                              │
+│  └─────────┬──────────────────┘                              │
+│            │ kubectl cp                                       │
+│            ↓                                                  │
+│  ┌────────────────────────────┐                              │
+│  │   PVC (70GB)               │                              │
+│  │   ├─ pg_dump.sql           │                              │
+│  │   └─ postgres data/        │                              │
+│  └────────────────────────────┘                              │
+│                                                               │
+│  Step 3: Restore Database (Kubernetes Job)                   │
+│  ┌────────────────────────────┐                              │
+│  │   Restore Job Pod          │                              │
+│  │   - Mounts same PVC        │                              │
+│  │   - Reads dump file        │                              │
+│  │   - Connects to PostgreSQL │                              │
+│  │   - Runs pg_restore/psql   │                              │
+│  └─────────┬──────────────────┘                              │
+│            │ SQL commands over network                        │
+│            ↓                                                  │
+│  ┌────────────────────────────┐                              │
+│  │   PostgreSQL 13 Pod        │                              │
+│  │   Writes restored data ────────→ PVC                      │
+│  └────────────────────────────┘                              │
+│                                                               │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-**Supported formats:**
-- Plain SQL dump (`.sql`)
-- PostgreSQL custom-format dump (created with `pg_dump -Fc`)
+## Quick Start
 
-The restore script automatically detects the format and uses the appropriate restore method (`psql` or `pg_restore`).
+### 1. Add Environment Variables in Okteto
+
+Go to Okteto admin panel → Variables:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `TARGET_DB` | Database name | `mydatabase` |
+| `ROLE_PASSWORD` | PostgreSQL password | `secure_password_123` |
+| `LOCAL_DUMP_FILE` | Dump file path (optional) | `pg_dump.sql` |
+
+### 2. Add Your Dump File
+
+Place dump in project root:
+
+```bash
+# Rename to pg_dump.sql (or set LOCAL_DUMP_FILE in step 1)
+mv your-dump.sql pg_dump.sql
+```
 
 ### 3. Deploy
 
@@ -46,139 +80,101 @@ The restore script automatically detects the format and uses the appropriate res
 okteto deploy --wait
 ```
 
-This will:
-- Clean any previous PostgreSQL deployment
-- Deploy fresh PostgreSQL with 70GB storage
-- Copy your dump to the database pod
-- Start a Kubernetes Job to restore the database (runs in background)
+That's it! The process will:
+1. Deploy PostgreSQL 13
+2. Copy dump to PostgreSQL pod (via kubectl cp)
+3. Create restore Job (runs in background)
 
-**That's it!** The restore job will run unattended in the cluster. You can disconnect and check back later.
-
-**How it works:**
-1. Okteto builds a custom Docker image from `job-restore/` folder
-2. The Job runs this image, which mounts the same PVC as PostgreSQL
-3. The restore script connects to PostgreSQL remotely and restores the dump
-4. All logic is self-contained in the `job-restore/` folder
-
-### Monitor Restore Progress
+### 4. Monitor Restore
 
 ```bash
-# Watch restore job logs in real-time
+# Watch restore progress
 kubectl logs -f -n ${OKTETO_NAMESPACE} job/postgres-restore-job
 
 # Check job status
-kubectl get job -n ${OKTETO_NAMESPACE} postgres-restore-job
+kubectl get job -n ${OKTETO_NAMESPACE}
 ```
-
-The Job will automatically handle the restore even if you disconnect. Kubernetes will keep it running until completion.
-
-## Verify Data
-
-Check your restored database:
-
-```bash
-./3-check-data.sh
-```
-
-## Access Database
-
-Connect to PostgreSQL:
-
-```bash
-kubectl exec -it -n ${OKTETO_NAMESPACE} -l stack.okteto.com/service=main-dev-db -- \
-  psql -U postgres -d your_database_name
-```
-
-Or use port forwarding:
-
-```bash
-kubectl port-forward -n ${OKTETO_NAMESPACE} svc/main-dev-db 5432:5432
-```
-
-Then connect locally:
-
-```bash
-psql -h localhost -U postgres -d your_database_name
-```
-
-## Manual Steps (Alternative)
-
-If you prefer to run steps manually with local scripts instead of the automated Job:
-
-```bash
-# 1. Deploy PostgreSQL only
-okteto deploy --file postgres-infra/docker-compose.yml --wait
-
-# 2. Copy dump
-./1-copy-dump.sh
-
-# 3. Restore database (runs locally, requires stable connection)
-./2-restore-dump.sh
-
-# 4. Check data
-./3-check-data.sh
-```
-
-**Note**: Manual restore with `2-restore-dump.sh` requires your terminal to stay connected for the entire duration (potentially hours). The automated Job approach is more reliable for large dumps.
 
 ## Time Estimates
 
-| Dump Size | Estimated Time |
-|-----------|----------------|
-| 1 GB      | ~15 minutes    |
-| 10 GB     | ~1 hour        |
-| 50 GB     | ~2-3 hours     |
-| 100 GB    | ~3-5 hours     |
+| Dump Size | Copy Time | Restore Time | Total |
+|-----------|-----------|--------------|-------|
+| 10GB      | 5-10 min  | 20-40 min    | ~1h   |
+| 50GB      | 20-40 min | 1-2 hours    | ~3h   |
+| 100GB     | 30-60 min | 2-4 hours    | ~5h   |
+
+## Access Database
+
+```bash
+# Connect via kubectl
+kubectl exec -it -n ${OKTETO_NAMESPACE} -l stack.okteto.com/service=main-dev-db -- \
+  psql -U postgres -d ${TARGET_DB}
+
+# Port forward
+kubectl port-forward -n ${OKTETO_NAMESPACE} svc/main-dev-db 5432:5432
+
+# Connect locally
+psql -h localhost -U postgres -d ${TARGET_DB}
+```
+
+## Manual Scripts
+
+If you prefer manual control:
+
+```bash
+# Copy dump
+./1-copy-dump.sh
+
+# Restore (uses kubectl exec - requires stable connection)
+./2-restore-dump.sh
+
+# Check restored data
+./3-check-data.sh
+```
+
+## Configuration
+
+**PostgreSQL Settings:**
+- Version: 13
+- Storage: 70GB PVC (csi-okteto)
+- max_wal_size: 4GB
+- checkpoint_timeout: 15min
+- Resources: 2 CPU, 8GB RAM
+
+**Supported Formats:**
+- Plain SQL (`.sql`)
+- Custom format (`pg_dump -Fc`)
 
 ## Troubleshooting
 
-**Check pod status:**
 ```bash
+# Check pod status
 kubectl get pods -n ${OKTETO_NAMESPACE}
-```
 
-**View logs:**
-```bash
+# View PostgreSQL logs
 kubectl logs -n ${OKTETO_NAMESPACE} -l stack.okteto.com/service=main-dev-db
-```
 
-**Check disk space:**
-```bash
+# Check disk space
 kubectl exec -n ${OKTETO_NAMESPACE} -l stack.okteto.com/service=main-dev-db -- df -h
+
+# Debug restore job
+kubectl describe job -n ${OKTETO_NAMESPACE} postgres-restore-job
 ```
 
 ## Clean Up
-
-To remove everything:
 
 ```bash
 okteto destroy
 ```
 
-⚠️ **Warning**: This deletes all data including the persistent volume.
-
-## Configuration Details
-
-**PostgreSQL Settings:**
-- Version: 13
-- Storage: 70GB persistent volume
-- max_wal_size: 4GB (optimized for large dumps)
-- checkpoint_timeout: 15min
-- Resources: 2 CPU cores, 8GB memory
-
-**Files:**
-- `okteto.yml` - Deployment automation with image build
-- `job-restore/` - Restore Job self-contained folder
-  - `Dockerfile` - Custom image definition
-  - `restore-in-pod.sh` - Restore script (runs in cluster)
-  - `restore-job.yaml` - Kubernetes Job manifest
-- `pg_dump.sql` - Your database dump (add this)
-- `postgres-infra/docker-compose.yml` - PostgreSQL service
-- `postgres-infra/.env` - Database configuration
-- `1-copy-dump.sh` - Copy dump to pod (manual)
-- `2-restore-dump.sh` - Restore database (manual, uses kubectl exec)
-- `3-check-data.sh` - Verify restored data
+⚠️ **Warning**: Deletes all data including PVC.
 
 ---
 
-For more help: [Okteto Documentation](https://www.okteto.com/docs)
+**Files:**
+- `okteto.yml` - Deployment pipeline
+- `postgres-infra/docker-compose.yml` - PostgreSQL service
+- `job-restore/` - Restore Job (runs in cluster)
+- `1-copy-dump.sh` - Manual copy script
+- `2-restore-dump.sh` - Manual restore script
+- `3-check-data.sh` - Verify restored data
