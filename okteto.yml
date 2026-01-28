@@ -19,12 +19,16 @@ deploy:
   - name: Copy Dump to PostgreSQL Pod
     command: |
       echo "Running copy script..."
-      echo "Note: If pg_dump.sql doesn't exist, the script will show an error"
+      echo "Note: If dump file doesn't exist, the script will show an error"
+
+      # Export LOCAL_DUMP_FILE if not set (default to pg_dump.sql)
+      export LOCAL_DUMP_FILE="${LOCAL_DUMP_FILE:-pg_dump.sql}"
+
       ./1-copy-dump.sh || {
         echo ""
-        echo "⚠️  Copy script failed or pg_dump.sql not found"
+        echo "⚠️  Copy script failed or dump file not found"
         echo "⚠️  Skipping restore step"
-        echo "⚠️  To restore later, place pg_dump.sql in project root and run:"
+        echo "⚠️  To restore later, place your dump file and run:"
         echo "    ./1-copy-dump.sh"
         exit 0
       }
