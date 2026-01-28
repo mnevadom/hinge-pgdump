@@ -18,28 +18,54 @@ deploy:
 
   - name: Copy Dump to PostgreSQL Pod
     command: |
+      echo "Waiting for PostgreSQL pod to be ready..."
+
+      # Wait for PostgreSQL pod to exist
+      RETRY=0
+      MAX_RETRIES=30
+      while [ $RETRY -lt $MAX_RETRIES ]; do
+        POD_COUNT=$(kubectl get pods -n ${OKTETO_NAMESPACE} -l stack.okteto.com/service=main-dev-db --no-headers 2>/dev/null | wc -l)
+        if [ "$POD_COUNT" -gt 0 ]; then
+          echo "✓ PostgreSQL pod found"
+          break
+        fi
+        echo "Waiting for pod... ($RETRY/$MAX_RETRIES)"
+        sleep 5
+        RETRY=$((RETRY + 1))
+      done
+
+      if [ $RETRY -eq $MAX_RETRIES ]; then
+        echo "✗ PostgreSQL pod not found after waiting"
+        echo "Deployment may have failed. Check:"
+        echo "  kubectl get pods -n ${OKTETO_NAMESPACE}"
+        exit 1
+      fi
+
+      echo ""
       echo "Running copy script..."
-      echo "Note: If dump file doesn't exist, the script will show an error"
 
       # Export LOCAL_DUMP_FILE if not set (default to pg_dump.sql)
       export LOCAL_DUMP_FILE="${LOCAL_DUMP_FILE:-pg_dump.sql}"
 
-      ./1-copy-dump.sh || {
-        echo ""
-        echo "⚠️  Copy script failed or dump file not found"
-        echo "⚠️  Skipping restore step"
-        echo "⚠️  To restore later, place your dump file and run:"
-        echo "    ./1-copy-dump.sh"
-        exit 0
-      }
+      ./1-copy-dump.sh
 
       echo ""
       echo "Waiting a few seconds for file to sync across mounts..."
       sleep 10
       echo "✓ Ready to start restore job"
 
+      # Create marker file to indicate copy succeeded
+      touch /tmp/copy-succeeded
+
   - name: Restore Database
     command: |
+      # Check if copy step succeeded
+      if [ ! -f /tmp/copy-succeeded ]; then
+        echo "⚠️  Copy step did not complete successfully"
+        echo "⚠️  Skipping restore step"
+        exit 0
+      fi
+
       echo "Starting database restore job..."
 
       # Create ConfigMap and Job with environment variable substitution
