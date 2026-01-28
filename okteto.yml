@@ -18,19 +18,12 @@ deploy:
 
   - name: Copy Dump to PostgreSQL Pod
     command: |
-      # Load environment variables
-      if [ -f "postgres-infra/.env" ]; then
-        export $(cat postgres-infra/.env | grep -v '^#' | xargs)
-      fi
-
-      LOCAL_DUMP_FILE="${LOCAL_DUMP_FILE:-pg_dump.sql}"
-
-      echo "Checking if dump file exists: $LOCAL_DUMP_FILE"
-      if [ ! -f "$LOCAL_DUMP_FILE" ]; then
-        echo "⚠️  Warning: Dump file not found: $LOCAL_DUMP_FILE"
+      echo "Checking if pg_dump.sql exists..."
+      if [ ! -f "pg_dump.sql" ]; then
+        echo "⚠️  Warning: pg_dump.sql not found in project root"
         echo "⚠️  Skipping dump copy and restore steps"
-        echo "⚠️  To restore a dump later, place your dump file and update LOCAL_DUMP_FILE in .env"
-        echo "    Then run: ./1-copy-dump.sh"
+        echo "⚠️  To restore a dump later, place pg_dump.sql in project root and run:"
+        echo "    ./1-copy-dump.sh"
         exit 0
       fi
 

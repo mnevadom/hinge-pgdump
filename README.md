@@ -11,26 +11,18 @@ Edit `postgres-infra/.env`:
 ```bash
 TARGET_DB=your_database_name
 ROLE_PASSWORD=your_secure_password
-
-# Local dump file to copy (path on your machine)
-LOCAL_DUMP_FILE=pg_dump.sql
 ```
-
-**Note:** You can change `LOCAL_DUMP_FILE` to point to a different dump file (e.g., `my_backup.sql` or `/path/to/backup.dump`).
 
 ### 2. Add Your Database Dump
 
-Place your database dump in the project root:
+Place your database dump in the project root and rename it to `pg_dump.sql`:
 
 ```bash
 # If compressed, decompress first
 gunzip your-dump.sql.gz
 
-# Option 1: Rename to pg_dump.sql (default)
+# Rename to pg_dump.sql
 mv your-dump.sql pg_dump.sql
-
-# Option 2: Keep your filename and update LOCAL_DUMP_FILE in .env
-# LOCAL_DUMP_FILE=my_backup.sql
 ```
 
 **Supported formats:**

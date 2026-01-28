@@ -4,7 +4,7 @@
 # and check exit codes manually
 
 # Configuration
-DUMP_FILE="${LOCAL_DUMP_FILE:-pg_dump.sql}"
+DUMP_FILE="pg_dump.sql"
 POD_NAME=""
 NAMESPACE="${OKTETO_NAMESPACE}"
 RESTORE_PATH="/var/lib/postgresql/data"
