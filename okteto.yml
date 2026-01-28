@@ -4,18 +4,8 @@ build:
     dockerfile: Dockerfile
 
 deploy:
-  - name: Clean Previous PostgreSQL Deployment
-    command: |
-      echo "Cleaning up any previous PostgreSQL deployment..."
-      okteto destroy -v || echo "No previous deployment found"
-      echo "✓ Cleanup completed"
-
-  - name: Deploy PostgreSQL Compose
-    command: |
-      echo "Deploying PostgreSQL via docker-compose..."
-      okteto deploy --file postgres-infra/docker-compose.yml --wait
-      echo "✓ PostgreSQL deployed successfully"
-
+  compose: postgres-infra/docker-compose.yml
+  commands:
   - name: Copy Dump to PostgreSQL Pod
     command: |
       echo "Waiting for PostgreSQL pod to be ready..."
