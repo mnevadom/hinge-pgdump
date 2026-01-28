@@ -29,7 +29,10 @@ spec:
               name: postgres-restore-config
               key: TARGET_DB
         - name: DUMP_PATH_IN_PG_POD
-          value: "/var/lib/postgresql/data/pg_dump.sql"
+          valueFrom:
+            configMapKeyRef:
+              name: postgres-restore-config
+              key: DUMP_FILE_PATH
         volumeMounts:
         - name: postgres-data
           mountPath: /var/lib/postgresql/data
@@ -52,3 +55,4 @@ metadata:
   name: postgres-restore-config
 data:
   TARGET_DB: ${TARGET_DB}
+  DUMP_FILE_PATH: /var/lib/postgresql/data/${DUMP_FILENAME}

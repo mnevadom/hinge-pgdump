@@ -19,6 +19,11 @@ deploy:
   - name: Restore Database
     command: |
       echo "Starting restore job..."
+
+      # Get the dump filename (basename of LOCAL_DUMP_FILE)
+      export LOCAL_DUMP_FILE="${LOCAL_DUMP_FILE:-pg_dump.sql}"
+      export DUMP_FILENAME=$(basename "$LOCAL_DUMP_FILE")
+
       envsubst < job-restore/restore-job.yaml | kubectl apply -n ${OKTETO_NAMESPACE} -f -
       echo "✓ Restore job created"
       echo ""
