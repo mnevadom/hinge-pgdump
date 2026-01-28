@@ -12,6 +12,10 @@ Add the following environment variables in the Okteto admin panel:
 - `TARGET_DB` - Your database name (e.g., `mydatabase`)
 - `ROLE_PASSWORD` - PostgreSQL password (e.g., `your_secure_password`)
 
+**Optional variables:**
+- `LOCAL_DUMP_FILE` - Path/name of dump file to copy (default: `pg_dump.sql`)
+  - Examples: `my_backup.sql`, `dumps/production.dump`, `/path/to/backup.sql`
+
 **How to add variables:**
 1. Go to your Okteto namespace settings
 2. Navigate to "Variables" or "Environment Variables"
