@@ -164,7 +164,7 @@ kubectl describe job -n ${OKTETO_NAMESPACE} postgres-restore-job
 ## Clean Up
 
 ```bash
-okteto destroy
+okteto destroy -v
 ```
 
 ⚠️ **Warning**: Deletes all data including PVC.
